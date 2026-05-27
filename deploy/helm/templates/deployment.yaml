@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+  labels:
+    {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "incidentflow-k8s-agent.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: INCIDENTFLOW_PLATFORM_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: platform-url
+            - name: INCIDENTFLOW_GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: gateway-url
+            - name: INCIDENTFLOW_CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: cluster-name
+            - name: INCIDENTFLOW_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: log-level
+            - name: INCIDENTFLOW_NAMESPACE_ALLOWLIST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: namespace-allowlist
+            - name: INCIDENTFLOW_DEFAULT_TAIL_LINES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: default-tail-lines
+            - name: INCIDENTFLOW_MAX_TAIL_LINES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: max-tail-lines
+            - name: INCIDENTFLOW_MAX_LOG_BYTES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: max-log-bytes
+            - name: INCIDENTFLOW_COMMAND_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: command-timeout
+            - name: INCIDENTFLOW_HEARTBEAT_PERIOD
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: heartbeat-period
+            - name: INCIDENTFLOW_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: registration-token
+                  optional: true
+            - name: INCIDENTFLOW_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  key: agent-token
+                  optional: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: token-store
+              mountPath: /var/lib/incidentflow
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      volumes:
+        - name: token-store
+          emptyDir: {}

@@ -1,0 +1,48 @@
+replicaCount: 1
+
+image:
+  repository: incidentflow/incidentflow-k8s-agent
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+platformUrl: "https://api.incidentflow.io"
+gatewayUrl: "wss://gateway.incidentflow.io/agents/ws"
+clusterName: ""
+logLevel: info
+
+registrationToken: ""
+agentToken: ""
+
+namespaceAllowlist: []
+
+limits:
+  defaultTailLines: 200
+  maxTailLines: 1000
+  maxLogBytes: 524288
+  commandTimeout: 30s
+  heartbeatPeriod: 30s
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

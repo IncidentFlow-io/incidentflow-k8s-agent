@@ -1,0 +1,4 @@
+{{/*
+IncidentFlow Kubernetes Agent is outbound-only and does not expose an HTTP server.
+This template intentionally renders no Service object.
+*/}}
