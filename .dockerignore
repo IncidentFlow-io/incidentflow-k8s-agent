@@ -1,0 +1,15 @@
+.git
+.github
+.cache
+bin
+agent
+
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+.env
+go.work
+go.work.sum
