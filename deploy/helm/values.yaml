@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: incidentflow/incidentflow-k8s-agent
+  repository: ghcr.io/incidentflow-io/incidentflow-platform/incidentflow-k8s-agent
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
