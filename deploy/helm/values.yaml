@@ -5,6 +5,8 @@ image:
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
 platformUrl: "https://api.incidentflow.io"
 gatewayUrl: "wss://gateway.incidentflow.io/agents/ws"
 clusterName: ""
@@ -21,6 +23,13 @@ limits:
   maxLogBytes: 524288
   commandTimeout: 30s
   heartbeatPeriod: 30s
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
 
 podSecurityContext:
   runAsNonRoot: true

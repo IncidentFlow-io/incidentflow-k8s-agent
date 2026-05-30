@@ -16,14 +16,16 @@ type Registrar struct {
 }
 
 type registrationRequest struct {
-	ClusterName  string `json:"cluster_name"`
-	AgentVersion string `json:"agent_version"`
+	RegistrationToken string `json:"registration_token"`
+	ClusterName       string `json:"cluster_name"`
+	AgentVersion      string `json:"agent_version"`
 }
 
 type registrationResponse struct {
 	AgentID    string `json:"agent_id"`
 	ClusterID  string `json:"cluster_id"`
 	AgentToken string `json:"agent_token"`
+	GatewayURL string `json:"gateway_url"`
 }
 
 func NewRegistrar(platformURL, registrationToken string) Registrar {
@@ -35,7 +37,11 @@ func NewRegistrar(platformURL, registrationToken string) Registrar {
 }
 
 func (r Registrar) Register(ctx context.Context, clusterName, version string) (Identity, error) {
-	body, err := json.Marshal(registrationRequest{ClusterName: clusterName, AgentVersion: version})
+	body, err := json.Marshal(registrationRequest{
+		RegistrationToken: r.registrationToken,
+		ClusterName:       clusterName,
+		AgentVersion:      version,
+	})
 	if err != nil {
 		return Identity{}, err
 	}
@@ -62,5 +68,10 @@ func (r Registrar) Register(ctx context.Context, clusterName, version string) (I
 	if decoded.AgentToken == "" {
 		return Identity{}, fmt.Errorf("registration response did not include agent_token")
 	}
-	return Identity{AgentID: decoded.AgentID, ClusterID: decoded.ClusterID, Token: decoded.AgentToken}, nil
+	return Identity{
+		AgentID:    decoded.AgentID,
+		ClusterID:  decoded.ClusterID,
+		Token:      decoded.AgentToken,
+		GatewayURL: decoded.GatewayURL,
+	}, nil
 }

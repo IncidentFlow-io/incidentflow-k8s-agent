@@ -15,6 +15,10 @@ spec:
         {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "incidentflow-k8s-agent.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -99,4 +103,9 @@ spec:
         {{- toYaml .Values.affinity | nindent 8 }}
       volumes:
         - name: token-store
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "incidentflow-k8s-agent.fullname" . }}-token-store
+          {{- else }}
           emptyDir: {}
+          {{- end }}
