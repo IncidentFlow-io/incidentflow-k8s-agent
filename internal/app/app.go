@@ -72,6 +72,11 @@ func (a *App) identity(ctx context.Context) (auth.Identity, error) {
 	if err := store.Save(identity.Token); err != nil {
 		return auth.Identity{}, fmt.Errorf("persist agent token: %w", err)
 	}
-	a.logger.Info("registered IncidentFlow agent", zap.String("agent_id", identity.AgentID), zap.String("cluster_id", identity.ClusterID))
+	a.logger.Info(
+		"registered IncidentFlow agent",
+		zap.String("agent_id", identity.AgentID),
+		zap.String("cluster_id", identity.ClusterID),
+		zap.String("gateway_url", identity.GatewayURL),
+	)
 	return identity, nil
 }

@@ -78,7 +78,11 @@ POST {INCIDENTFLOW_PLATFORM_URL}/api/v1/agents/register
 Authorization: Bearer {INCIDENTFLOW_REGISTRATION_TOKEN}
 ```
 
-and stores the returned token in `/var/lib/incidentflow/agent-token`. In production, prefer passing `agentToken` through the Helm Secret after registration.
+and stores the returned token in `/var/lib/incidentflow/agent-token`. The Helm chart uses a
+PersistentVolumeClaim for that token store by default so a one-time registration token is not
+needed again after a pod restart. For local or disposable clusters you can set
+`persistence.enabled=false`; restarted pods in that mode need a new registration token unless you
+provide `agentToken`.
 
 ## Local Development
 
@@ -108,6 +112,9 @@ helm install incidentflow-k8s-agent ./deploy/helm \
   --set clusterName=prod-us-east \
   --set registrationToken=...
 ```
+
+Use `--set persistence.enabled=false` only for development clusters where losing the exchanged
+agent token is acceptable.
 
 ## Kind Smoke Test
 
