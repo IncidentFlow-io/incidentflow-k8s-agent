@@ -3,8 +3,8 @@ name: docker-build-push
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'incidentflow-k8s-agent/v*'
+      - 'incidentflow-k8s-agent/dev-v*'
 
 permissions:
   contents: read
@@ -12,9 +12,58 @@ permissions:
 
 env:
   REGISTRY_IMAGE: ghcr.io/incidentflow-io/incidentflow-platform/incidentflow-k8s-agent
+  INFRA_VALUES_DEV: helm/incidentflow-k8s-agent/values-dev.yaml
+  INFRA_VALUES_PROD: helm/incidentflow-k8s-agent/values-prod.yaml
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      minor_version: ${{ steps.release.outputs.minor_version }}
+      environment: ${{ steps.release.outputs.environment }}
+      values_file: ${{ steps.release.outputs.values_file }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare release metadata
+        id: release
+        run: |
+          service="${GITHUB_REF_NAME%/*}"
+          version="${GITHUB_REF_NAME#*/}"
+
+          if [[ "$service" != "incidentflow-k8s-agent" ]]; then
+            echo "Unsupported service: $service" >&2
+            exit 1
+          fi
+
+          if [[ "$version" == dev-* ]]; then
+            environment="dev"
+            values_file="${INFRA_VALUES_DEV}"
+            target_branch="origin/dev"
+          else
+            environment="prod"
+            values_file="${INFRA_VALUES_PROD}"
+            target_branch="origin/main"
+          fi
+
+          git fetch origin main dev
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "$target_branch"; then
+            echo "Tag ${GITHUB_REF_NAME} points to ${GITHUB_SHA}, which is not contained in ${target_branch}." >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "minor_version=${version%.*}" >> "$GITHUB_OUTPUT"
+          echo "environment=${environment}" >> "$GITHUB_OUTPUT"
+          echo "values_file=${values_file}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs:
+      - prepare
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +111,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ env.REGISTRY_IMAGE }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ needs.prepare.outputs.version }}
             COMMIT=${{ github.sha }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
 
@@ -83,6 +132,7 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     needs:
+      - prepare
       - build
     steps:
       - name: Download digests
@@ -108,10 +158,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=${{ needs.prepare.outputs.minor_version }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -121,4 +169,56 @@ jobs:
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ needs.prepare.outputs.version }}
+
+  update-infra:
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - merge
+    permissions:
+      contents: read
+    steps:
+      - name: Check infrastructure token
+        env:
+          INFRA_GITHUB_TOKEN: ${{ secrets.INFRA_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$INFRA_GITHUB_TOKEN" ]; then
+            echo "INFRA_GITHUB_TOKEN secret is missing or empty. Add a PAT with contents:write access to IncidentFlow-io/infrastructure." >&2
+            exit 1
+          fi
+
+      - name: Checkout infrastructure repo
+        uses: actions/checkout@v4
+        with:
+          repository: IncidentFlow-io/infrastructure
+          token: ${{ secrets.INFRA_GITHUB_TOKEN }}
+
+      - name: Install yq
+        run: |
+          YQ_VERSION="v4.44.3"
+          wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          chmod +x /usr/local/bin/yq
+
+      - name: Update Helm values image tag
+        run: |
+          set -euo pipefail
+
+          values_file="${{ needs.prepare.outputs.values_file }}"
+          version="${{ needs.prepare.outputs.version }}"
+          environment="${{ needs.prepare.outputs.environment }}"
+
+          export version
+          yq -i '.image.tag = strenv(version)' "$values_file"
+
+          git config user.email "ci-bot@incidentflow.io"
+          git config user.name "CI Bot"
+          git add "$values_file"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit. Tag already matches current value."
+            exit 0
+          fi
+
+          git commit -m "chore(incidentflow-k8s-agent): update ${environment} image tag to ${version} [skip ci]"
+          git push
