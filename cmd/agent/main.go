@@ -12,6 +12,7 @@ import (
 
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/app"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/config"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/telemetry"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/version"
 	"go.uber.org/zap"
@@ -71,6 +72,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	tracingCfg := observability.ConfigFromEnv()
+	shutdownTracing, err := observability.Init(ctx, tracingCfg, logger)
+	if err != nil {
+		logger.Warn("otel tracing init failed, continuing without tracing", zap.Error(err))
+		shutdownTracing = func(context.Context) {}
+	}
+	defer shutdownTracing(context.Background())
 
 	if err := app.New(cfg, logger).Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("agent stopped", zap.Error(err))

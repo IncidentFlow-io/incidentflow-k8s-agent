@@ -9,7 +9,11 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/zap"
 )
 
@@ -155,9 +159,38 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 
 func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd apiv1.Command) {
 	started := time.Now()
+
+	// Extract distributed trace context from the command payload (injected by agent-gateway).
+	if cmd.Traceparent != "" {
+		carrier := propagation.MapCarrier{
+			"traceparent": cmd.Traceparent,
+			"tracestate":  cmd.Tracestate,
+		}
+		prop := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{})
+		ctx = prop.Extract(ctx, carrier)
+	}
+
 	cmdCtx, cancel := context.WithTimeout(ctx, c.commandTimeout)
 	defer cancel()
+
+	cmdCtx, span := observability.Tracer.Start(cmdCtx, "k8s_agent.handle_command")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("command.id", cmd.ID),
+		attribute.String("command.action", cmd.Action),
+	)
+
 	resp := c.handler.Handle(cmdCtx, cmd)
+	span.SetAttributes(attribute.String("command.status", resp.Status))
+	if resp.Status != apiv1.StatusSuccess {
+		if resp.Error != nil {
+			span.SetStatus(codes.Error, resp.Error.Code)
+		} else {
+			span.SetStatus(codes.Error, "command failed")
+		}
+	} else {
+		span.SetStatus(codes.Ok, "")
+	}
 	data, err := EncodeResponse(resp)
 	if err != nil {
 		c.logger.Error("encode command response", zap.String("command_id", cmd.ID), zap.Error(err))

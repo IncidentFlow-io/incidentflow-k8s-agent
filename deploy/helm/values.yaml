@@ -52,6 +52,11 @@ resources:
     cpu: 250m
     memory: 256Mi
 
+observability:
+  tracingEnabled: "false"
+  otlpEndpoint: "otel-collector.observability.svc.cluster.local:4317"
+  environment: "production"
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

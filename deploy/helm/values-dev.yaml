@@ -1,0 +1,4 @@
+observability:
+  tracingEnabled: "true"
+  otlpEndpoint: "otel-collector.observability.svc.cluster.local:4317"
+  environment: "dev"
