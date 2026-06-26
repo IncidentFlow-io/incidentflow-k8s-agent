@@ -15,4 +15,5 @@ type Kubernetes interface {
 	ListDeployments(ctx context.Context, namespace string) ([]kube.Deployment, error)
 	ListServices(ctx context.Context, namespace string) ([]kube.ServiceResource, error)
 	GetRolloutStatus(ctx context.Context, namespace, name string) (kube.RolloutStatus, error)
+	DescribePod(ctx context.Context, namespace, name string) (kube.PodDescription, error)
 }

@@ -34,6 +34,9 @@ func (fakeKube) ListServices(context.Context, string) ([]kube.ServiceResource, e
 func (fakeKube) GetRolloutStatus(context.Context, string, string) (kube.RolloutStatus, error) {
 	return kube.RolloutStatus{Complete: true}, nil
 }
+func (fakeKube) DescribePod(context.Context, string, string) (kube.PodDescription, error) {
+	return kube.PodDescription{}, nil
+}
 
 func TestRouterRejectsUnsupportedAction(t *testing.T) {
 	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})

@@ -12,6 +12,10 @@ type Command struct {
 	Type   string          `json:"type"`
 	Action string          `json:"action"`
 	Params json.RawMessage `json:"params,omitempty"`
+	// Traceparent / Tracestate carry the W3C trace context from the originating
+	// request so the agent can link its spans into the distributed trace.
+	Traceparent string `json:"traceparent,omitempty"`
+	Tracestate  string `json:"tracestate,omitempty"`
 }
 
 type ListNamespacesParams struct{}
@@ -51,4 +55,9 @@ type ListServicesParams struct {
 type GetRolloutStatusParams struct {
 	Namespace  string `json:"namespace"`
 	Deployment string `json:"deployment"`
+}
+
+type DescribePodParams struct {
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod"`
 }

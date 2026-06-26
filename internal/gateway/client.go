@@ -2,13 +2,18 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +65,7 @@ func (c *Client) Run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version)
+		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version, c.heartbeatPeriod)
 		if err != nil {
 			delay := backoff.Next()
 			c.logger.Warn("gateway connection failed", zap.Error(err), zap.Duration("retry_in", delay))
@@ -81,12 +86,24 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) serveConnection(ctx context.Context, conn *websocket.Conn) error {
+	// connCtx is cancelled when this connection ends, stopping in-flight handlers.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
+	var wg sync.WaitGroup
+	defer wg.Wait() // drain in-flight handleCommand goroutines before conn.Close()
+
 	errCh := make(chan error, 2)
-	go c.heartbeat(ctx, conn, errCh)
-	go c.readLoop(ctx, conn, errCh)
+	go c.heartbeat(connCtx, conn, errCh)
+	go c.readLoop(connCtx, conn, &wg, errCh)
+
 	select {
 	case <-ctx.Done():
-		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"), time.Now().Add(5*time.Second))
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"),
+			time.Now().Add(5*time.Second),
+		)
 		return ctx.Err()
 	case err := <-errCh:
 		return err
@@ -102,17 +119,21 @@ func (c *Client) heartbeat(ctx context.Context, conn *websocket.Conn, errCh chan
 			return
 		case <-ticker.C:
 			c.writeMu.Lock()
-			err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
+			pingErr := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
+			if pingErr == nil {
+				hbMsg, _ := json.Marshal(map[string]string{"type": "heartbeat"})
+				pingErr = conn.WriteMessage(websocket.TextMessage, hbMsg)
+			}
 			c.writeMu.Unlock()
-			if err != nil {
-				errCh <- err
+			if pingErr != nil {
+				errCh <- pingErr
 				return
 			}
 		}
 	}
 }
 
-func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, errCh chan<- error) {
+func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.WaitGroup, errCh chan<- error) {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
@@ -128,15 +149,48 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, errCh chan<
 			zap.String("command_id", cmd.ID),
 			zap.String("action", cmd.Action),
 		)
-		go c.handleCommand(ctx, conn, cmd)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.handleCommand(ctx, conn, cmd)
+		}()
 	}
 }
 
-func (c *Client) handleCommand(parent context.Context, conn *websocket.Conn, cmd apiv1.Command) {
+func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd apiv1.Command) {
 	started := time.Now()
-	ctx, cancel := context.WithTimeout(parent, c.commandTimeout)
+
+	// Extract distributed trace context from the command payload (injected by agent-gateway).
+	if cmd.Traceparent != "" {
+		carrier := propagation.MapCarrier{
+			"traceparent": cmd.Traceparent,
+			"tracestate":  cmd.Tracestate,
+		}
+		prop := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{})
+		ctx = prop.Extract(ctx, carrier)
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, c.commandTimeout)
 	defer cancel()
-	resp := c.handler.Handle(ctx, cmd)
+
+	cmdCtx, span := observability.Tracer.Start(cmdCtx, "k8s_agent.handle_command")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("command.id", cmd.ID),
+		attribute.String("command.action", cmd.Action),
+	)
+
+	resp := c.handler.Handle(cmdCtx, cmd)
+	span.SetAttributes(attribute.String("command.status", resp.Status))
+	if resp.Status != apiv1.StatusSuccess {
+		if resp.Error != nil {
+			span.SetStatus(codes.Error, resp.Error.Code)
+		} else {
+			span.SetStatus(codes.Error, "command failed")
+		}
+	} else {
+		span.SetStatus(codes.Ok, "")
+	}
 	data, err := EncodeResponse(resp)
 	if err != nil {
 		c.logger.Error("encode command response", zap.String("command_id", cmd.ID), zap.Error(err))

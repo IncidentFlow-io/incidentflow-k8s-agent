@@ -2,7 +2,6 @@ package kube
 
 import (
 	"context"
-	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,9 +71,3 @@ func toDeployment(deployment appsv1.Deployment) Deployment {
 	}
 }
 
-func rolloutMessage(name string, complete bool) string {
-	if complete {
-		return fmt.Sprintf("deployment %s successfully rolled out", name)
-	}
-	return fmt.Sprintf("deployment %s rollout is not complete", name)
-}

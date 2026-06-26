@@ -5,6 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,8 +45,11 @@ func (r *Router) Handle(ctx context.Context, cmd apiv1.Command) apiv1.Response {
 func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 	switch cmd.Action {
 	case ActionListNamespaces:
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_namespaces")
+		defer span.End()
 		namespaces, err := r.kube.ListNamespaces(ctx)
 		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		filtered := make([]any, 0, len(namespaces))
@@ -50,7 +58,10 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 				filtered = append(filtered, namespace)
 			}
 		}
+		span.SetAttributes(attribute.Int("items.count", len(filtered)))
+		span.SetStatus(codes.Ok, "")
 		return map[string]any{"namespaces": filtered}, nil
+
 	case ActionListPods:
 		params, err := decodeParams[apiv1.ListPodsParams](cmd)
 		if err != nil {
@@ -60,24 +71,25 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				pods, err := r.kube.ListPods(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, pod := range pods {
-					all = append(all, pod)
-				}
-			}
-			return map[string]any{"pods": all}, nil
+			all, err := parallelMapTraced(ctx, "k8s.api.list_pods", namespaces, r.kube.ListPods)
+			return map[string]any{"pods": all}, err
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_pods")
+		defer span.End()
+		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace))
 		pods, err := r.kube.ListPods(ctx, params.Namespace)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("items.count", len(pods)))
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"pods": pods}, err
+
 	case ActionGetPod:
 		params, err := decodeParams[apiv1.GetPodParams](cmd)
 		if err != nil {
@@ -89,8 +101,20 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.get_pod")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("k8s.namespace", params.Namespace),
+			attribute.String("k8s.pod", params.Pod),
+		)
 		pod, err := r.kube.GetPod(ctx, params.Namespace, params.Pod)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"pod": pod}, err
+
 	case ActionGetPodLogs:
 		params, err := decodeParams[apiv1.GetPodLogsParams](cmd)
 		if err != nil {
@@ -102,9 +126,23 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.get_pod_logs")
+		defer span.End()
 		tail := r.limits.TailLines(params.TailLines)
+		span.SetAttributes(
+			attribute.String("k8s.namespace", params.Namespace),
+			attribute.String("k8s.pod", params.Pod),
+			attribute.String("k8s.container", params.Container),
+			attribute.Int64("k8s.tail_lines", tail),
+		)
 		logs, err := r.kube.GetPodLogs(ctx, params.Namespace, params.Pod, params.Container, tail, r.limits.MaxLogBytes)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
 		return logs, err
+
 	case ActionListEvents:
 		params, err := decodeParams[apiv1.ListEventsParams](cmd)
 		if err != nil {
@@ -114,24 +152,25 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				events, err := r.kube.ListEvents(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, event := range events {
-					all = append(all, event)
-				}
-			}
-			return map[string]any{"events": all}, nil
+			all, err := parallelMapTraced(ctx, "k8s.api.list_events", namespaces, r.kube.ListEvents)
+			return map[string]any{"events": all}, err
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_events")
+		defer span.End()
+		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace))
 		events, err := r.kube.ListEvents(ctx, params.Namespace)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("items.count", len(events)))
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"events": events}, err
+
 	case ActionListDeployments:
 		params, err := decodeParams[apiv1.ListDeploymentsParams](cmd)
 		if err != nil {
@@ -141,24 +180,25 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				deployments, err := r.kube.ListDeployments(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, deployment := range deployments {
-					all = append(all, deployment)
-				}
-			}
-			return map[string]any{"deployments": all}, nil
+			all, err := parallelMapTraced(ctx, "k8s.api.list_deployments", namespaces, r.kube.ListDeployments)
+			return map[string]any{"deployments": all}, err
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_deployments")
+		defer span.End()
+		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace))
 		deployments, err := r.kube.ListDeployments(ctx, params.Namespace)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("items.count", len(deployments)))
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"deployments": deployments}, err
+
 	case ActionListServices:
 		params, err := decodeParams[apiv1.ListServicesParams](cmd)
 		if err != nil {
@@ -168,24 +208,25 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				services, err := r.kube.ListServices(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, service := range services {
-					all = append(all, service)
-				}
-			}
-			return map[string]any{"services": all}, nil
+			all, err := parallelMapTraced(ctx, "k8s.api.list_services", namespaces, r.kube.ListServices)
+			return map[string]any{"services": all}, err
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_services")
+		defer span.End()
+		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace))
 		services, err := r.kube.ListServices(ctx, params.Namespace)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("items.count", len(services)))
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"services": services}, err
+
 	case ActionGetRolloutStatus:
 		params, err := decodeParams[apiv1.GetRolloutStatusParams](cmd)
 		if err != nil {
@@ -197,11 +238,99 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
 		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.get_rollout_status")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("k8s.namespace", params.Namespace),
+			attribute.String("k8s.deployment", params.Deployment),
+		)
 		status, err := r.kube.GetRolloutStatus(ctx, params.Namespace, params.Deployment)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
 		return map[string]any{"rollout": status}, err
-	default:
-		return nil, fmt.Errorf("unsupported action %q", cmd.Action)
+
+	case ActionDescribePod:
+		params, err := decodeParams[apiv1.DescribePodParams](cmd)
+		if err != nil {
+			return nil, invalidParams(err)
+		}
+		if params.Namespace == "" || params.Pod == "" {
+			return nil, invalidParams(errors.New("namespace and pod are required"))
+		}
+		if err := r.guard.Check(params.Namespace); err != nil {
+			return nil, namespaceDenied(err)
+		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.describe_pod")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("k8s.namespace", params.Namespace),
+			attribute.String("k8s.pod", params.Pod),
+		)
+		desc, err := r.kube.DescribePod(ctx, params.Namespace, params.Pod)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("events.count", len(desc.Events)))
+			span.SetStatus(codes.Ok, "")
+		}
+		return map[string]any{"description": desc}, err
 	}
+	// ValidateCommand rejects unknown actions before dispatch is called.
+	return nil, fmt.Errorf("unsupported action %q", cmd.Action)
+}
+
+// parallelMapTraced calls fn(ctx, ns) for each namespace concurrently,
+// creating a span for each call, and returns a flat []any of all results.
+func parallelMapTraced[T any](
+	ctx context.Context,
+	spanName string,
+	namespaces []string,
+	fn func(context.Context, string) ([]T, error),
+) ([]any, error) {
+	if len(namespaces) == 0 {
+		return nil, nil
+	}
+	g, gCtx := errgroup.WithContext(ctx)
+	results := make([][]T, len(namespaces))
+	for i, ns := range namespaces {
+		i, ns := i, ns
+		g.Go(func() error {
+			nsCtx, nsSpan := observability.Tracer.Start(gCtx, spanName)
+			defer nsSpan.End()
+			nsSpan.SetAttributes(attribute.String("k8s.namespace", ns))
+			items, err := fn(nsCtx, ns)
+			if err != nil {
+				nsSpan.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			nsSpan.SetAttributes(attribute.Int("items.count", len(items)))
+			nsSpan.SetStatus(codes.Ok, "")
+			results[i] = items
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	var all []any
+	for _, items := range results {
+		for _, item := range items {
+			all = append(all, item)
+		}
+	}
+	return all, nil
+}
+
+// parallelMap is kept for compatibility with existing tests.
+func parallelMap[T any](
+	ctx context.Context,
+	namespaces []string,
+	fn func(context.Context, string) ([]T, error),
+) ([]any, error) {
+	return parallelMapTraced(ctx, "k8s.api.call", namespaces, fn)
 }
 
 func (r *Router) allowedNamespaces(ctx context.Context) ([]string, error) {

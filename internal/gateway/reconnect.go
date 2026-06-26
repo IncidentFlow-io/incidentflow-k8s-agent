@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"time"
 )
 
@@ -30,6 +30,6 @@ func (b *Backoff) Next() time.Duration {
 		}
 		b.current = next
 	}
-	jitter := time.Duration(rand.Int63n(int64(b.current / 2)))
+	jitter := time.Duration(rand.Int64N(int64(b.current / 2)))
 	return b.current + jitter
 }

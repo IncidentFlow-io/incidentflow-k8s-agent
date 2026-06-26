@@ -3,17 +3,27 @@ package kube
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"golang.org/x/sync/singleflight"
 )
+
+const namespaceCacheTTL = 30 * time.Second
 
 type Service struct {
 	client    kubernetes.Interface
 	discovery discovery.DiscoveryInterface
+
+	nsMu       sync.Mutex
+	nsCache    []Namespace
+	nsCachedAt time.Time
+	nsSf       singleflight.Group
 }
 
 func NewInClusterService() (*Service, error) {
