@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -60,7 +61,7 @@ func (c *Client) Run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version)
+		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version, c.heartbeatPeriod)
 		if err != nil {
 			delay := backoff.Next()
 			c.logger.Warn("gateway connection failed", zap.Error(err), zap.Duration("retry_in", delay))
@@ -81,12 +82,24 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) serveConnection(ctx context.Context, conn *websocket.Conn) error {
+	// connCtx is cancelled when this connection ends, stopping in-flight handlers.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
+	var wg sync.WaitGroup
+	defer wg.Wait() // drain in-flight handleCommand goroutines before conn.Close()
+
 	errCh := make(chan error, 2)
-	go c.heartbeat(ctx, conn, errCh)
-	go c.readLoop(ctx, conn, errCh)
+	go c.heartbeat(connCtx, conn, errCh)
+	go c.readLoop(connCtx, conn, &wg, errCh)
+
 	select {
 	case <-ctx.Done():
-		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"), time.Now().Add(5*time.Second))
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"),
+			time.Now().Add(5*time.Second),
+		)
 		return ctx.Err()
 	case err := <-errCh:
 		return err
@@ -102,17 +115,21 @@ func (c *Client) heartbeat(ctx context.Context, conn *websocket.Conn, errCh chan
 			return
 		case <-ticker.C:
 			c.writeMu.Lock()
-			err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
+			pingErr := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
+			if pingErr == nil {
+				hbMsg, _ := json.Marshal(map[string]string{"type": "heartbeat"})
+				pingErr = conn.WriteMessage(websocket.TextMessage, hbMsg)
+			}
 			c.writeMu.Unlock()
-			if err != nil {
-				errCh <- err
+			if pingErr != nil {
+				errCh <- pingErr
 				return
 			}
 		}
 	}
 }
 
-func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, errCh chan<- error) {
+func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.WaitGroup, errCh chan<- error) {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
@@ -128,15 +145,19 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, errCh chan<
 			zap.String("command_id", cmd.ID),
 			zap.String("action", cmd.Action),
 		)
-		go c.handleCommand(ctx, conn, cmd)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.handleCommand(ctx, conn, cmd)
+		}()
 	}
 }
 
-func (c *Client) handleCommand(parent context.Context, conn *websocket.Conn, cmd apiv1.Command) {
+func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd apiv1.Command) {
 	started := time.Now()
-	ctx, cancel := context.WithTimeout(parent, c.commandTimeout)
+	cmdCtx, cancel := context.WithTimeout(ctx, c.commandTimeout)
 	defer cancel()
-	resp := c.handler.Handle(ctx, cmd)
+	resp := c.handler.Handle(cmdCtx, cmd)
 	data, err := EncodeResponse(resp)
 	if err != nil {
 		c.logger.Error("encode command response", zap.String("command_id", cmd.ID), zap.Error(err))

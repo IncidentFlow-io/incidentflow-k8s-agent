@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -62,7 +63,7 @@ func (r Registrar) Register(ctx context.Context, clusterName, version string) (I
 		return Identity{}, fmt.Errorf("registration failed with status %s", resp.Status)
 	}
 	var decoded registrationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&decoded); err != nil {
 		return Identity{}, err
 	}
 	if decoded.AgentToken == "" {

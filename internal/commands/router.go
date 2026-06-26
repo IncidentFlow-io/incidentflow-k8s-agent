@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,21 +62,12 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				pods, err := r.kube.ListPods(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, pod := range pods {
-					all = append(all, pod)
-				}
-			}
-			return map[string]any{"pods": all}, nil
+			all, err := parallelMap(ctx, namespaces, r.kube.ListPods)
+			return map[string]any{"pods": all}, err
 		}
 		pods, err := r.kube.ListPods(ctx, params.Namespace)
 		return map[string]any{"pods": pods}, err
@@ -114,21 +107,12 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				events, err := r.kube.ListEvents(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, event := range events {
-					all = append(all, event)
-				}
-			}
-			return map[string]any{"events": all}, nil
+			all, err := parallelMap(ctx, namespaces, r.kube.ListEvents)
+			return map[string]any{"events": all}, err
 		}
 		events, err := r.kube.ListEvents(ctx, params.Namespace)
 		return map[string]any{"events": events}, err
@@ -141,21 +125,12 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				deployments, err := r.kube.ListDeployments(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, deployment := range deployments {
-					all = append(all, deployment)
-				}
-			}
-			return map[string]any{"deployments": all}, nil
+			all, err := parallelMap(ctx, namespaces, r.kube.ListDeployments)
+			return map[string]any{"deployments": all}, err
 		}
 		deployments, err := r.kube.ListDeployments(ctx, params.Namespace)
 		return map[string]any{"deployments": deployments}, err
@@ -168,21 +143,12 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			return nil, namespaceDenied(err)
 		}
 		if params.Namespace == "" {
-			var all []any
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			for _, namespace := range namespaces {
-				services, err := r.kube.ListServices(ctx, namespace)
-				if err != nil {
-					return nil, err
-				}
-				for _, service := range services {
-					all = append(all, service)
-				}
-			}
-			return map[string]any{"services": all}, nil
+			all, err := parallelMap(ctx, namespaces, r.kube.ListServices)
+			return map[string]any{"services": all}, err
 		}
 		services, err := r.kube.ListServices(ctx, params.Namespace)
 		return map[string]any{"services": services}, err
@@ -199,9 +165,45 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		}
 		status, err := r.kube.GetRolloutStatus(ctx, params.Namespace, params.Deployment)
 		return map[string]any{"rollout": status}, err
-	default:
-		return nil, fmt.Errorf("unsupported action %q", cmd.Action)
 	}
+	// ValidateCommand rejects unknown actions before dispatch is called, so this
+	// branch is unreachable in practice — kept as a compile-time exhaustion guard.
+	return nil, fmt.Errorf("unsupported action %q", cmd.Action)
+}
+
+// parallelMap calls fn(ctx, ns) for each namespace concurrently and returns a
+// flat []any of all results. The first error cancels remaining work via context.
+func parallelMap[T any](
+	ctx context.Context,
+	namespaces []string,
+	fn func(context.Context, string) ([]T, error),
+) ([]any, error) {
+	if len(namespaces) == 0 {
+		return nil, nil
+	}
+	g, gCtx := errgroup.WithContext(ctx)
+	results := make([][]T, len(namespaces))
+	for i, ns := range namespaces {
+		i, ns := i, ns
+		g.Go(func() error {
+			items, err := fn(gCtx, ns)
+			if err != nil {
+				return err
+			}
+			results[i] = items
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	var all []any
+	for _, items := range results {
+		for _, item := range items {
+			all = append(all, item)
+		}
+	}
+	return all, nil
 }
 
 func (r *Router) allowedNamespaces(ctx context.Context) ([]string, error) {

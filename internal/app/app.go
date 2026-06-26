@@ -39,8 +39,12 @@ func (a *App) Run(ctx context.Context) error {
 		MaxLogBytes:      a.cfg.MaxLogBytes,
 	}
 	router := commands.NewRouter(kubeService, guard, limits)
+	gatewayURL := identity.GatewayURL
+	if gatewayURL == "" {
+		gatewayURL = a.cfg.GatewayURL
+	}
 	client := gateway.NewClient(gateway.Options{
-		GatewayURL:      a.cfg.GatewayURL,
+		GatewayURL:      gatewayURL,
 		Identity:        identity,
 		ClusterName:     a.cfg.ClusterName,
 		Version:         version.Version,
@@ -78,5 +82,10 @@ func (a *App) identity(ctx context.Context) (auth.Identity, error) {
 		zap.String("cluster_id", identity.ClusterID),
 		zap.String("gateway_url", identity.GatewayURL),
 	)
+	// Use the gateway URL from registration if the platform returned one,
+	// falling back to the configured value.
+	if identity.GatewayURL == "" {
+		identity.GatewayURL = a.cfg.GatewayURL
+	}
 	return identity, nil
 }

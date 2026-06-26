@@ -14,7 +14,7 @@ type Dialer interface {
 	DialContext(ctx context.Context, urlStr string, requestHeader http.Header) (*websocket.Conn, *http.Response, error)
 }
 
-func dialWebSocket(ctx context.Context, dialer Dialer, gatewayURL string, identity auth.Identity, clusterName, version string) (*websocket.Conn, error) {
+func dialWebSocket(ctx context.Context, dialer Dialer, gatewayURL string, identity auth.Identity, clusterName, version string, heartbeatPeriod time.Duration) (*websocket.Conn, error) {
 	parsed, err := url.Parse(gatewayURL)
 	if err != nil {
 		return nil, err
@@ -37,6 +37,13 @@ func dialWebSocket(ctx context.Context, dialer Dialer, gatewayURL string, identi
 	if err != nil {
 		return nil, err
 	}
-	configureHeartbeat(conn, 2*time.Minute)
+	// pongWait must be larger than heartbeatPeriod so the connection isn't
+	// closed between pings. Use 3× the period with a 2-minute floor.
+	pongWait := 3 * heartbeatPeriod
+	if pongWait < 2*time.Minute {
+		pongWait = 2 * time.Minute
+	}
+	conn.SetReadLimit(4 * 1024 * 1024) // 4 MB per message
+	configureHeartbeat(conn, pongWait)
 	return conn, nil
 }
