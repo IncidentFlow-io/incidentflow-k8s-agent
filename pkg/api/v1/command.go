@@ -56,3 +56,8 @@ type GetRolloutStatusParams struct {
 	Namespace  string `json:"namespace"`
 	Deployment string `json:"deployment"`
 }
+
+type DescribePodParams struct {
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod"`
+}

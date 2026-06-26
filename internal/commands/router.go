@@ -251,6 +251,32 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			span.SetStatus(codes.Ok, "")
 		}
 		return map[string]any{"rollout": status}, err
+
+	case ActionDescribePod:
+		params, err := decodeParams[apiv1.DescribePodParams](cmd)
+		if err != nil {
+			return nil, invalidParams(err)
+		}
+		if params.Namespace == "" || params.Pod == "" {
+			return nil, invalidParams(errors.New("namespace and pod are required"))
+		}
+		if err := r.guard.Check(params.Namespace); err != nil {
+			return nil, namespaceDenied(err)
+		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.describe_pod")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("k8s.namespace", params.Namespace),
+			attribute.String("k8s.pod", params.Pod),
+		)
+		desc, err := r.kube.DescribePod(ctx, params.Namespace, params.Pod)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Int("events.count", len(desc.Events)))
+			span.SetStatus(codes.Ok, "")
+		}
+		return map[string]any{"description": desc}, err
 	}
 	// ValidateCommand rejects unknown actions before dispatch is called.
 	return nil, fmt.Errorf("unsupported action %q", cmd.Action)

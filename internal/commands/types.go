@@ -9,6 +9,7 @@ const (
 	ActionListDeployments  = "k8s.list_deployments"
 	ActionListServices     = "k8s.list_services"
 	ActionGetRolloutStatus = "k8s.get_rollout_status"
+	ActionDescribePod      = "k8s.describe_pod"
 )
 
 var allowedActions = map[string]struct{}{
@@ -20,6 +21,7 @@ var allowedActions = map[string]struct{}{
 	ActionListDeployments:  {},
 	ActionListServices:     {},
 	ActionGetRolloutStatus: {},
+	ActionDescribePod:      {},
 }
 
 func IsAllowedAction(action string) bool {
