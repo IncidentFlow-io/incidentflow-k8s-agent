@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  REGISTRY_IMAGE: ghcr.io/incidentflow-io/incidentflow-platform/incidentflow-k8s-agent
+  REGISTRY_IMAGE: ghcr.io/incidentflow-io/incidentflow-k8s-agent
   INFRA_VALUES_DEV: helm/incidentflow-k8s-agent/values-dev.yaml
   INFRA_VALUES_PROD: helm/incidentflow-k8s-agent/values-prod.yaml
 
