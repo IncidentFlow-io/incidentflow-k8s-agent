@@ -42,7 +42,7 @@ jobs:
         run: |
           helm package deploy/helm/ \
             --version "${{ needs.prepare.outputs.version }}" \
-            --app-version "v${{ needs.prepare.outputs.version }}"
+            --app-version "${{ needs.prepare.outputs.version }}"
 
       - name: Push Helm chart to OCI registry
         id: helm-push

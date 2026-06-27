@@ -3,4 +3,4 @@ name: incidentflow-k8s-agent
 description: Outbound-only Kubernetes agent for IncidentFlow
 type: application
 version: 1.0.7
-appVersion: "1.0.7"
+appVersion: "v1.0.7"
