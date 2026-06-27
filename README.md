@@ -158,3 +158,40 @@ It intentionally creates no Service object because the agent is outbound-only.
 - Optional namespace allowlist narrows command scope.
 - Pod log output is capped by `INCIDENTFLOW_MAX_TAIL_LINES` and `INCIDENTFLOW_MAX_LOG_BYTES`.
 - WebSocket authentication uses the persistent agent token.
+
+## Verifying Release Signatures
+
+All release artifacts — Docker images and Helm charts — are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing (GitHub Actions OIDC). No long-lived private keys are used.
+
+### Prerequisites
+
+```bash
+brew install cosign
+# or: https://docs.sigstore.dev/cosign/system_config/installation/
+```
+
+### Verify Docker Image
+
+```bash
+cosign verify \
+  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/incidentflow-io/incidentflow-k8s-agent:v1.0.6
+```
+
+### Verify Helm Chart
+
+```bash
+cosign verify \
+  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent:1.0.6
+```
+
+A successful verification prints the signing certificate details including:
+
+- `Subject` — the exact workflow file and tag that produced the artifact
+- `githubWorkflowRepository` — `IncidentFlow-io/incidentflow-k8s-agent`
+- `githubWorkflowRef` — the git tag (e.g. `refs/tags/v1.0.6`)
+
+All signatures are recorded in the [Sigstore transparency log (Rekor)](https://rekor.sigstore.dev) and cannot be tampered with after the fact.
