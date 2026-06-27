@@ -1,197 +1,183 @@
 # incidentflow-k8s-agent
 
-`incidentflow-k8s-agent` is a lightweight outbound-only Kubernetes cluster agent for IncidentFlow. It runs inside a customer cluster, authenticates with the IncidentFlow platform, opens a WebSocket to the Agent Gateway, and executes a small set of read-only Kubernetes inspection commands.
+`incidentflow-k8s-agent` is a lightweight outbound-only Kubernetes cluster agent for IncidentFlow. It runs inside your cluster, authenticates with the IncidentFlow platform, opens a persistent WebSocket to the Agent Gateway, and executes a small set of read-only Kubernetes inspection commands on behalf of the platform.
 
-## Architecture
+## How it works
 
 ```text
 MCP Client
   -> IncidentFlow MCP Server
   -> IncidentFlow Platform API
   -> IncidentFlow Agent Gateway
-  -> incidentflow-k8s-agent
+  -> incidentflow-k8s-agent  (inside your cluster)
   -> Kubernetes API
 ```
 
-The agent never exposes a public HTTP endpoint and never requires inbound traffic. It uses Kubernetes in-cluster authentication through `rest.InClusterConfig()`.
+The agent never exposes a public endpoint and never requires inbound traffic. All communication is initiated outbound from the agent. Kubernetes access uses in-cluster service account credentials via `rest.InClusterConfig()`.
 
-## Commands
+## Installation
 
-Supported actions:
+### Prerequisites
 
-- `k8s.list_namespaces`
-- `k8s.list_pods`
-- `k8s.get_pod`
-- `k8s.get_pod_logs`
-- `k8s.list_events`
-- `k8s.list_deployments`
-- `k8s.list_services`
-- `k8s.get_rollout_status`
+- Kubernetes 1.24+
+- Helm 3.10+
+- A registration token from the IncidentFlow platform (`incidentflow cluster install` handles this automatically)
 
-Example command:
+### Install via Helm OCI
 
-```json
-{
-  "id": "req_123",
-  "type": "command",
-  "action": "k8s.get_pod_logs",
-  "params": {
-    "namespace": "production",
-    "pod": "checkout-api-7c9d6f",
-    "tail_lines": 200
-  }
-}
+```sh
+helm install incidentflow-k8s-agent \
+  oci://ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent \
+  --version 1.0.6 \
+  --namespace incidentflow-agent \
+  --create-namespace \
+  --set agent.clusterName=prod-us-east \
+  --set agent.registrationToken=<your-token>
 ```
 
-Example response:
+### Install via IncidentFlow CLI
 
-```json
-{
-  "id": "req_123",
-  "type": "response",
-  "status": "success",
-  "data": {
-    "logs": "...",
-    "truncated": false
-  }
-}
+The recommended way. The CLI handles token issuance, helm diff preview, and confirmation before making any changes:
+
+```sh
+incidentflow cluster install --name prod-us-east
 ```
 
 ## Configuration
 
-Environment variables:
+All values are documented in [`deploy/helm/README.md`](deploy/helm/README.md).
+
+Key environment variables injected by the Helm chart:
 
 | Variable | Required | Description |
-| --- | --- | --- |
-| `INCIDENTFLOW_PLATFORM_URL` | yes | Platform API base URL. |
-| `INCIDENTFLOW_GATEWAY_URL` | yes | WebSocket gateway URL. |
-| `INCIDENTFLOW_REGISTRATION_TOKEN` | if no agent token | One-time registration token. |
-| `INCIDENTFLOW_AGENT_TOKEN` | if already registered | Persistent agent token. |
-| `INCIDENTFLOW_CLUSTER_NAME` | no | Human-readable cluster name. |
-| `INCIDENTFLOW_LOG_LEVEL` | no | Zap log level, defaults to `info`. |
-| `INCIDENTFLOW_NAMESPACE_ALLOWLIST` | no | Comma-separated namespace allowlist. |
+|---|---|---|
+| `INCIDENTFLOW_PLATFORM_URL` | yes | Platform API base URL |
+| `INCIDENTFLOW_GATEWAY_URL` | yes | WebSocket gateway URL |
+| `INCIDENTFLOW_REGISTRATION_TOKEN` | on first start | One-time registration token |
+| `INCIDENTFLOW_AGENT_TOKEN` | after registration | Persistent agent token (stored in `/var/lib/incidentflow/agent-token`) |
+| `INCIDENTFLOW_CLUSTER_NAME` | yes | Cluster identifier shown in the dashboard |
+| `INCIDENTFLOW_LOG_LEVEL` | no | Log level — `debug`, `info`, `warn`, `error`. Defaults to `info` |
+| `INCIDENTFLOW_NAMESPACE_ALLOWLIST` | no | Comma-separated namespace allowlist. Empty means all non-system namespaces |
 
-If `INCIDENTFLOW_AGENT_TOKEN` is absent, the agent calls:
+## Token persistence
 
-```text
-POST {INCIDENTFLOW_PLATFORM_URL}/api/v1/agents/register
-Authorization: Bearer {INCIDENTFLOW_REGISTRATION_TOKEN}
+On first start the agent exchanges the registration token for a persistent agent token and stores it in `/var/lib/incidentflow/agent-token`.
+
+By default `persistence.enabled=false` — the token store uses an `emptyDir` and the token is lost on pod restart. Enable a PVC for production clusters where you do not want to re-register after restarts:
+
+```sh
+helm upgrade incidentflow-k8s-agent ... --set persistence.enabled=true
 ```
 
-and stores the returned token in `/var/lib/incidentflow/agent-token`. The Helm chart uses a
-PersistentVolumeClaim for that token store by default so a one-time registration token is not
-needed again after a pod restart. For local or disposable clusters you can set
-`persistence.enabled=false`; restarted pods in that mode need a new registration token unless you
-provide `agentToken`.
+## Supported commands
 
-## Local Development
+| Command | Description |
+|---|---|
+| `k8s.list_namespaces` | List all namespaces |
+| `k8s.list_pods` | List pods in a namespace |
+| `k8s.get_pod` | Get a single pod |
+| `k8s.get_pod_logs` | Fetch pod logs |
+| `k8s.list_events` | List events in a namespace |
+| `k8s.list_deployments` | List deployments |
+| `k8s.list_services` | List services |
+| `k8s.get_rollout_status` | Get rollout status for a deployment |
 
-Build and test:
+## Security model
+
+- Read-only Kubernetes RBAC — no write permissions of any kind.
+- No access to Secrets.
+- No exec, apply, delete, patch, or mutation commands.
+- System namespaces are always blocked: `kube-system`, `kube-public`, `kube-node-lease`.
+- Optional namespace allowlist further restricts scope.
+- Log output is capped by `INCIDENTFLOW_MAX_TAIL_LINES` and `INCIDENTFLOW_MAX_LOG_BYTES`.
+- WebSocket sessions are authenticated with the persistent agent token.
+
+## Kubernetes resources created
+
+| Resource | Name |
+|---|---|
+| Deployment | `incidentflow-k8s-agent` |
+| ServiceAccount | `incidentflow-k8s-agent` |
+| ClusterRole | `incidentflow-k8s-agent` |
+| ClusterRoleBinding | `incidentflow-k8s-agent` |
+| ConfigMap | `incidentflow-k8s-agent-config` |
+| Secret | `incidentflow-agent-credentials` |
+| PVC _(optional)_ | `incidentflow-k8s-agent-token-store` |
+
+No Service object is created — the agent is outbound-only.
+
+## Verifying release signatures
+
+All release artifacts — Docker images and Helm charts — are signed with [cosign](https://github.com/sigstore/cosign) keyless signing via GitHub Actions OIDC. No long-lived private keys are used.
+
+```sh
+brew install cosign
+```
+
+**Verify Docker image:**
+
+```sh
+cosign verify \
+  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/incidentflow-io/incidentflow-k8s-agent:vX.Y.Z
+```
+
+**Verify Helm chart:**
+
+```sh
+cosign verify \
+  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent:X.Y.Z
+```
+
+A successful verification prints:
+
+- `Subject` — the exact workflow and tag that produced the artifact
+- `githubWorkflowRepository` — `IncidentFlow-io/incidentflow-k8s-agent`
+- `githubWorkflowRef` — the git tag (e.g. `refs/tags/vX.Y.Z`)
+
+All signatures are recorded in the [Sigstore Rekor transparency log](https://rekor.sigstore.dev).
+
+## Local development
 
 ```sh
 make build
 make test
-```
-
-Run:
-
-```sh
 make run
 ```
 
-Real runtime requires Kubernetes in-cluster service account credentials. Running locally without a pod-mounted service account will fail while loading `rest.InClusterConfig()`.
+Running outside a pod requires a valid kubeconfig. In-cluster service account credentials are not available outside Kubernetes.
 
-## Kubernetes Deployment
+## Helm chart development
 
-Install with Helm:
+### Regenerate values schema
 
-```sh
-helm install incidentflow-k8s-agent ./deploy/helm \
-  --namespace incidentflow-agent \
-  --create-namespace \
-  --set clusterName=prod-us-east \
-  --set registrationToken=...
-```
-
-Use `--set persistence.enabled=false` only for development clusters where losing the exchanged
-agent token is acceptable.
-
-## Kind Smoke Test
-
-Run a local end-to-end deployment into `kind`:
+After editing `values.yaml`, regenerate `values.schema.json` so Helm validates inputs on install:
 
 ```sh
-make kind-smoke-test
+cd deploy/helm
+helm schema
 ```
 
-The script creates or reuses a `kind` cluster named `incidentflow-agent`, builds the Docker image, loads it into the cluster, installs the Helm chart, and checks pod status, logs, and RBAC.
-
-With the default fake gateway URL, the agent is expected to run and log reconnect attempts.
-
-Override values when needed:
+Requires [helm-schema](https://github.com/dadav/helm-schema):
 
 ```sh
-KIND_CLUSTER_NAME=incidentflow-agent \
-INCIDENTFLOW_PLATFORM_URL=https://api.example.com \
-INCIDENTFLOW_GATEWAY_URL=wss://gateway.example.com/agents/ws \
-INCIDENTFLOW_AGENT_TOKEN=test-token \
-make kind-smoke-test
+helm plugin install https://github.com/dadav/helm-schema --verify=false
 ```
 
-The chart creates:
+### Regenerate values documentation
 
-- Deployment
-- ServiceAccount
-- read-only ClusterRole
-- ClusterRoleBinding
-- Secret
-- ConfigMap
+After editing `values.yaml` comments, regenerate `deploy/helm/README.md`:
 
-It intentionally creates no Service object because the agent is outbound-only.
-
-## Security Model
-
-- Read-only Kubernetes RBAC only.
-- No permissions for Secrets.
-- No exec, apply, delete, patch, or mutation commands.
-- Dangerous namespaces are always denied: `kube-system`, `kube-public`, `kube-node-lease`.
-- Optional namespace allowlist narrows command scope.
-- Pod log output is capped by `INCIDENTFLOW_MAX_TAIL_LINES` and `INCIDENTFLOW_MAX_LOG_BYTES`.
-- WebSocket authentication uses the persistent agent token.
-
-## Verifying Release Signatures
-
-All release artifacts — Docker images and Helm charts — are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing (GitHub Actions OIDC). No long-lived private keys are used.
-
-### Prerequisites
-
-```bash
-brew install cosign
-# or: https://docs.sigstore.dev/cosign/system_config/installation/
+```sh
+cd deploy/helm
+helm-docs
 ```
 
-### Verify Docker Image
+Requires [helm-docs](https://github.com/norwoodj/helm-docs):
 
-```bash
-cosign verify \
-  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
-  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  ghcr.io/incidentflow-io/incidentflow-k8s-agent:v1.0.6
+```sh
+brew install helm-docs
 ```
-
-### Verify Helm Chart
-
-```bash
-cosign verify \
-  --certificate-identity-regexp="https://github.com/IncidentFlow-io/incidentflow-k8s-agent" \
-  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent:1.0.6
-```
-
-A successful verification prints the signing certificate details including:
-
-- `Subject` — the exact workflow file and tag that produced the artifact
-- `githubWorkflowRepository` — `IncidentFlow-io/incidentflow-k8s-agent`
-- `githubWorkflowRef` — the git tag (e.g. `refs/tags/v1.0.6`)
-
-All signatures are recorded in the [Sigstore transparency log (Rekor)](https://rekor.sigstore.dev) and cannot be tampered with after the fact.

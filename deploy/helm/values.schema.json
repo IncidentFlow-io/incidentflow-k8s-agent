@@ -1,0 +1,408 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "affinity": {
+      "additionalProperties": false,
+      "description": "Affinity rules applied to the agent pod.",
+      "required": [],
+      "title": "affinity",
+      "type": "object"
+    },
+    "agent": {
+      "additionalProperties": false,
+      "properties": {
+        "clusterName": {
+          "default": "",
+          "description": "Cluster name shown in the IncidentFlow dashboard. Required.",
+          "title": "clusterName",
+          "type": "string"
+        },
+        "gatewayUrl": {
+          "default": "",
+          "description": "IncidentFlow agent gateway WebSocket URL. Defaults to the hosted gateway when empty.",
+          "title": "gatewayUrl",
+          "type": "string"
+        },
+        "platformUrl": {
+          "default": "",
+          "description": "IncidentFlow platform API URL. Defaults to the hosted platform when empty.",
+          "title": "platformUrl",
+          "type": "string"
+        },
+        "registrationToken": {
+          "default": "",
+          "description": "Registration token issued by the IncidentFlow platform. Passed by the CLI during install.\nNever commit a real token here — supply it via --set or a sealed secret.",
+          "title": "registrationToken",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clusterName",
+        "platformUrl",
+        "gatewayUrl",
+        "registrationToken"
+      ],
+      "title": "agent",
+      "type": "object"
+    },
+    "global": {
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "image": {
+      "additionalProperties": false,
+      "properties": {
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "description": "Image pull policy.",
+          "title": "pullPolicy",
+          "type": "string"
+        },
+        "repository": {
+          "default": "ghcr.io/incidentflow-io/incidentflow-k8s-agent",
+          "description": "Docker image repository.",
+          "title": "repository",
+          "type": "string"
+        },
+        "tag": {
+          "default": "",
+          "description": "Image tag. Defaults to the chart appVersion when empty.",
+          "title": "tag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "tag",
+        "pullPolicy"
+      ],
+      "title": "image",
+      "type": "object"
+    },
+    "imagePullSecrets": {
+      "description": "Secrets used to pull images from a private registry.",
+      "items": {
+        "required": []
+      },
+      "title": "imagePullSecrets",
+      "type": "array"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "commandTimeout": {
+          "default": "30s",
+          "description": "Timeout applied to each Kubernetes API command.",
+          "title": "commandTimeout",
+          "type": "string"
+        },
+        "defaultTailLines": {
+          "default": 200,
+          "description": "Default number of log lines returned when the caller does not specify a limit.",
+          "title": "defaultTailLines",
+          "type": "integer"
+        },
+        "heartbeatPeriod": {
+          "default": "30s",
+          "description": "How often the agent sends a heartbeat to the platform.",
+          "title": "heartbeatPeriod",
+          "type": "string"
+        },
+        "maxLogBytes": {
+          "default": 524288,
+          "description": "Hard maximum log body size in bytes returned per request.",
+          "title": "maxLogBytes",
+          "type": "integer"
+        },
+        "maxTailLines": {
+          "default": 1000,
+          "description": "Hard maximum number of log lines the agent will return per request.",
+          "title": "maxTailLines",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "defaultTailLines",
+        "maxTailLines",
+        "maxLogBytes",
+        "commandTimeout",
+        "heartbeatPeriod"
+      ],
+      "title": "limits",
+      "type": "object"
+    },
+    "logLevel": {
+      "default": "info",
+      "description": "Log level for the agent process.\nOne of: debug, info, warn, error.",
+      "title": "logLevel",
+      "type": "string"
+    },
+    "namespaceAllowlist": {
+      "description": "Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.",
+      "items": {
+        "required": []
+      },
+      "title": "namespaceAllowlist",
+      "type": "array"
+    },
+    "nodeSelector": {
+      "additionalProperties": false,
+      "description": "Node selector applied to the agent pod.",
+      "required": [],
+      "title": "nodeSelector",
+      "type": "object"
+    },
+    "observability": {
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "default": "production",
+          "description": "Deployment environment label included in trace metadata (e.g. production, staging).",
+          "title": "environment",
+          "type": "string"
+        },
+        "tracing": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Enable OpenTelemetry tracing. When false, no OTEL environment variables are injected.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "otlpEndpoint": {
+              "default": "",
+              "description": "OTLP gRPC endpoint for the OpenTelemetry collector.",
+              "title": "otlpEndpoint",
+              "type": "string"
+            }
+          },
+          "required": [
+            "enabled",
+            "otlpEndpoint"
+          ],
+          "title": "tracing",
+          "type": "object"
+        }
+      },
+      "required": [
+        "tracing",
+        "environment"
+      ],
+      "title": "observability",
+      "type": "object"
+    },
+    "persistence": {
+      "additionalProperties": false,
+      "properties": {
+        "accessModes": {
+          "description": "Access modes for the PVC.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "required": []
+          },
+          "title": "accessModes",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Enable a PersistentVolumeClaim for the agent token store.\nWhen disabled the token store uses an emptyDir (tokens are lost on pod restart).",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "size": {
+          "default": "1Gi",
+          "description": "Storage size for the token store PVC.",
+          "title": "size",
+          "type": "string"
+        },
+        "storageClassName": {
+          "default": "",
+          "description": "StorageClass name. Leave empty to use the cluster default.",
+          "title": "storageClassName",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "size",
+        "storageClassName",
+        "accessModes"
+      ],
+      "title": "persistence",
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "additionalProperties": false,
+      "description": "Pod-level security context.",
+      "properties": {
+        "fsGroup": {
+          "default": 65532,
+          "title": "fsGroup",
+          "type": "integer"
+        },
+        "runAsGroup": {
+          "default": 65532,
+          "title": "runAsGroup",
+          "type": "integer"
+        },
+        "runAsNonRoot": {
+          "default": true,
+          "title": "runAsNonRoot",
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "default": 65532,
+          "title": "runAsUser",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "runAsNonRoot",
+        "runAsUser",
+        "runAsGroup",
+        "fsGroup"
+      ],
+      "title": "podSecurityContext",
+      "type": "object"
+    },
+    "replicaCount": {
+      "default": 1,
+      "description": "Number of agent replicas. Should always be 1 — the agent holds a persistent WebSocket connection.",
+      "title": "replicaCount",
+      "type": "integer"
+    },
+    "resources": {
+      "additionalProperties": false,
+      "description": "CPU and memory resource requests and limits.",
+      "properties": {
+        "limits": {
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "default": "250m",
+              "title": "cpu",
+              "type": "string"
+            },
+            "memory": {
+              "default": "256Mi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "title": "limits",
+          "type": "object"
+        },
+        "requests": {
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "default": "50m",
+              "title": "cpu",
+              "type": "string"
+            },
+            "memory": {
+              "default": "64Mi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "title": "requests",
+          "type": "object"
+        }
+      },
+      "required": [
+        "requests",
+        "limits"
+      ],
+      "title": "resources",
+      "type": "object"
+    },
+    "securityContext": {
+      "additionalProperties": false,
+      "description": "Container-level security context.",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "default": false,
+          "title": "allowPrivilegeEscalation",
+          "type": "boolean"
+        },
+        "capabilities": {
+          "additionalProperties": false,
+          "properties": {
+            "drop": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "title": "drop",
+              "type": "array"
+            }
+          },
+          "required": [
+            "drop"
+          ],
+          "title": "capabilities",
+          "type": "object"
+        },
+        "readOnlyRootFilesystem": {
+          "default": true,
+          "title": "readOnlyRootFilesystem",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allowPrivilegeEscalation",
+        "readOnlyRootFilesystem",
+        "capabilities"
+      ],
+      "title": "securityContext",
+      "type": "object"
+    },
+    "tolerations": {
+      "description": "Tolerations applied to the agent pod.",
+      "items": {
+        "required": []
+      },
+      "title": "tolerations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "replicaCount",
+    "image",
+    "imagePullSecrets",
+    "agent",
+    "logLevel",
+    "namespaceAllowlist",
+    "limits",
+    "persistence",
+    "podSecurityContext",
+    "securityContext",
+    "resources",
+    "observability",
+    "nodeSelector",
+    "tolerations",
+    "affinity"
+  ],
+  "type": "object"
+}

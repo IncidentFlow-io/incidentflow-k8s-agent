@@ -2,5 +2,5 @@ apiVersion: v2
 name: incidentflow-k8s-agent
 description: Outbound-only Kubernetes agent for IncidentFlow
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 1.0.7
+appVersion: "1.0.7"

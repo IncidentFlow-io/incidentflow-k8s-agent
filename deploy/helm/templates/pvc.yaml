@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "incidentflow-k8s-agent.fullname" . }}-token-store
+  name: {{ include "incidentflow-k8s-agent.pvcName" . }}
   labels:
     {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
 spec:

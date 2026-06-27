@@ -1,42 +1,74 @@
+# -- Number of agent replicas. Should always be 1 — the agent holds a persistent WebSocket connection.
 replicaCount: 1
 
 image:
-  repository: ghcr.io/incidentflow-io/incidentflow-platform/incidentflow-k8s-agent
-  tag: "0.1.0"
+  # -- Docker image repository.
+  repository: ghcr.io/incidentflow-io/incidentflow-k8s-agent
+  # -- Image tag. Defaults to the chart appVersion when empty.
+  tag: ""
+  # -- Image pull policy.
   pullPolicy: IfNotPresent
 
+# -- Secrets used to pull images from a private registry.
+# @default -- `[]`
 imagePullSecrets: []
+# - name: my-registry-secret
 
-platformUrl: "https://api.incidentflow.io"
-gatewayUrl: "wss://gateway.incidentflow.io/agents/ws"
-clusterName: ""
+agent:
+  # -- Cluster name shown in the IncidentFlow dashboard. Required.
+  clusterName: ""
+  # -- IncidentFlow platform API URL. Defaults to the hosted platform when empty.
+  platformUrl: ""
+  # -- IncidentFlow agent gateway WebSocket URL. Defaults to the hosted gateway when empty.
+  gatewayUrl: ""
+  # -- Registration token issued by the IncidentFlow platform. Passed by the CLI during install.
+  # Never commit a real token here — supply it via --set or a sealed secret.
+  registrationToken: ""
+
+# -- Log level for the agent process.
+# One of: debug, info, warn, error.
 logLevel: info
 
-registrationToken: ""
-agentToken: ""
-
+# -- Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.
+# @default -- `[]` (all non-system namespaces are accessible)
 namespaceAllowlist: []
+# - production
+# - staging
 
 limits:
+  # -- Default number of log lines returned when the caller does not specify a limit.
   defaultTailLines: 200
+  # -- Hard maximum number of log lines the agent will return per request.
   maxTailLines: 1000
+  # -- Hard maximum log body size in bytes returned per request.
   maxLogBytes: 524288
+  # -- Timeout applied to each Kubernetes API command.
   commandTimeout: 30s
+  # -- How often the agent sends a heartbeat to the platform.
   heartbeatPeriod: 30s
 
 persistence:
-  enabled: true
+  # -- Enable a PersistentVolumeClaim for the agent token store.
+  # When disabled the token store uses an emptyDir (tokens are lost on pod restart).
+  enabled: false
+  # -- Storage size for the token store PVC.
   size: 1Gi
+  # -- StorageClass name. Leave empty to use the cluster default.
   storageClassName: ""
+  # -- Access modes for the PVC.
   accessModes:
     - ReadWriteOnce
 
+# -- Pod-level security context.
+# @default -- See values.yaml
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
   runAsGroup: 65532
   fsGroup: 65532
 
+# -- Container-level security context.
+# @default -- See values.yaml
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
@@ -44,6 +76,8 @@ securityContext:
     drop:
       - ALL
 
+# -- CPU and memory resource requests and limits.
+# @default -- See values.yaml
 resources:
   requests:
     cpu: 50m
@@ -53,10 +87,26 @@ resources:
     memory: 256Mi
 
 observability:
-  tracingEnabled: "false"
-  otlpEndpoint: "otel-collector.observability.svc.cluster.local:4317"
+  tracing:
+    # -- Enable OpenTelemetry tracing. When false, no OTEL environment variables are injected.
+    enabled: false
+    # -- OTLP gRPC endpoint for the OpenTelemetry collector.
+    otlpEndpoint: ""
+  # -- Deployment environment label included in trace metadata (e.g. production, staging).
   environment: "production"
 
+# -- Node selector applied to the agent pod.
+# @default -- `{}` (schedule on any node)
 nodeSelector: {}
+# kubernetes.io/arch: amd64
+
+# -- Tolerations applied to the agent pod.
+# @default -- `[]`
 tolerations: []
+# - key: "node-role.kubernetes.io/control-plane"
+#   operator: "Exists"
+#   effect: "NoSchedule"
+
+# -- Affinity rules applied to the agent pod.
+# @default -- `{}` (no affinity rules)
 affinity: {}

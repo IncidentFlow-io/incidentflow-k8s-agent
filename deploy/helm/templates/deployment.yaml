@@ -23,85 +23,42 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: agent
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "incidentflow-k8s-agent.configmapName" . }}
           env:
-            - name: INCIDENTFLOW_PLATFORM_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: platform-url
-            - name: INCIDENTFLOW_GATEWAY_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: gateway-url
-            - name: INCIDENTFLOW_CLUSTER_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: cluster-name
-            - name: INCIDENTFLOW_LOG_LEVEL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: log-level
-            - name: INCIDENTFLOW_NAMESPACE_ALLOWLIST
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: namespace-allowlist
-            - name: INCIDENTFLOW_DEFAULT_TAIL_LINES
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: default-tail-lines
-            - name: INCIDENTFLOW_MAX_TAIL_LINES
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: max-tail-lines
-            - name: INCIDENTFLOW_MAX_LOG_BYTES
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: max-log-bytes
-            - name: INCIDENTFLOW_COMMAND_TIMEOUT
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: command-timeout
-            - name: INCIDENTFLOW_HEARTBEAT_PERIOD
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
-                  key: heartbeat-period
             - name: INCIDENTFLOW_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  name: {{ include "incidentflow-k8s-agent.secretName" . }}
                   key: registration-token
                   optional: true
             - name: INCIDENTFLOW_AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+                  name: {{ include "incidentflow-k8s-agent.secretName" . }}
                   key: agent-token
                   optional: true
             - name: K8S_NAMESPACE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if .Values.observability.tracing.enabled }}
             - name: OBSERVABILITY_TRACING_ENABLED
-              value: {{ .Values.observability.tracingEnabled | default "false" | quote }}
+              value: "true"
+            {{- if .Values.observability.tracing.otlpEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.observability.otlpEndpoint | default "otel-collector.observability.svc.cluster.local:4317" | quote }}
+              value: {{ .Values.observability.tracing.otlpEndpoint | quote }}
+            {{- end }}
             - name: SERVICE_VERSION
               value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
             - name: ENV
-              value: {{ .Values.observability.environment | default "production" | quote }}
+              value: {{ .Values.observability.environment | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -117,7 +74,7 @@ spec:
         - name: token-store
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "incidentflow-k8s-agent.fullname" . }}-token-store
+            claimName: {{ include "incidentflow-k8s-agent.pvcName" . }}
           {{- else }}
           emptyDir: {}
           {{- end }}

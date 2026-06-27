@@ -1,17 +1,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+  name: {{ include "incidentflow-k8s-agent.configmapName" . }}
   labels:
     {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
 data:
-  platform-url: {{ .Values.platformUrl | quote }}
-  gateway-url: {{ .Values.gatewayUrl | quote }}
-  cluster-name: {{ default .Release.Name .Values.clusterName | quote }}
-  log-level: {{ .Values.logLevel | quote }}
-  namespace-allowlist: {{ join "," .Values.namespaceAllowlist | quote }}
-  default-tail-lines: {{ .Values.limits.defaultTailLines | quote }}
-  max-tail-lines: {{ .Values.limits.maxTailLines | quote }}
-  max-log-bytes: {{ .Values.limits.maxLogBytes | quote }}
-  command-timeout: {{ .Values.limits.commandTimeout | quote }}
-  heartbeat-period: {{ .Values.limits.heartbeatPeriod | quote }}
+  INCIDENTFLOW_PLATFORM_URL: {{ .Values.agent.platformUrl | default "https://api.incidentflow.io" | quote }}
+  INCIDENTFLOW_GATEWAY_URL: {{ .Values.agent.gatewayUrl | default "wss://gateway.incidentflow.io/agents/ws" | quote }}
+  INCIDENTFLOW_CLUSTER_NAME: {{ .Values.agent.clusterName | default .Release.Name | quote }}
+  INCIDENTFLOW_LOG_LEVEL: {{ .Values.logLevel | quote }}
+  INCIDENTFLOW_NAMESPACE_ALLOWLIST: {{ join "," .Values.namespaceAllowlist | quote }}
+  INCIDENTFLOW_DEFAULT_TAIL_LINES: {{ .Values.limits.defaultTailLines | quote }}
+  INCIDENTFLOW_MAX_TAIL_LINES: {{ .Values.limits.maxTailLines | quote }}
+  INCIDENTFLOW_MAX_LOG_BYTES: {{ .Values.limits.maxLogBytes | quote }}
+  INCIDENTFLOW_COMMAND_TIMEOUT: {{ .Values.limits.commandTimeout | quote }}
+  INCIDENTFLOW_HEARTBEAT_PERIOD: {{ .Values.limits.heartbeatPeriod | quote }}
