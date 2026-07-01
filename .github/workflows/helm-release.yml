@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'dev-v*'
 
 permissions:
   contents: read
@@ -18,11 +19,23 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.meta.outputs.version }}
+      chart_version: ${{ steps.meta.outputs.chart_version }}
+      app_version: ${{ steps.meta.outputs.app_version }}
     steps:
       - id: meta
         run: |
-          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          ref_name="${GITHUB_REF_NAME}"
+
+          if [[ "$ref_name" == dev-v* ]]; then
+            chart_version="${ref_name#dev-v}-dev"
+            app_version="$ref_name"
+          else
+            chart_version="${ref_name#v}"
+            app_version="$ref_name"
+          fi
+
+          echo "chart_version=${chart_version}" >> "$GITHUB_OUTPUT"
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
 
   release:
     runs-on: ubuntu-latest
@@ -41,13 +54,13 @@ jobs:
       - name: Package Helm chart
         run: |
           helm package deploy/helm/ \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --app-version "v${{ needs.prepare.outputs.version }}"
+            --version "${{ needs.prepare.outputs.chart_version }}" \
+            --app-version "${{ needs.prepare.outputs.app_version }}"
 
       - name: Push Helm chart to OCI registry
         id: helm-push
         run: |
-          VERSION=${{ needs.prepare.outputs.version }}
+          VERSION=${{ needs.prepare.outputs.chart_version }}
           PUSH_OUTPUT=$(helm push "${CHART_NAME}-${VERSION}.tgz" "${CHART_REGISTRY}" 2>&1)
           echo "$PUSH_OUTPUT"
           CHART_DIGEST=$(echo "$PUSH_OUTPUT" | grep "^Digest:" | awk '{print $2}')

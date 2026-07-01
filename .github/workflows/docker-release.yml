@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'dev-v*'
 
 permissions:
   contents: read
@@ -12,16 +13,32 @@ permissions:
 
 env:
   IMAGE: ghcr.io/incidentflow-io/incidentflow-k8s-agent
+  INFRA_VALUES_DEV: helm/incidentflow-k8s-agent/values-dev.yaml
+  INFRA_VALUES_PROD: helm/incidentflow-k8s-agent/values-prod.yaml
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      environment: ${{ steps.meta.outputs.environment }}
+      values_file: ${{ steps.meta.outputs.values_file }}
     steps:
       - id: meta
         run: |
-          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          version="${GITHUB_REF_NAME}"
+
+          if [[ "$version" == dev-v* ]]; then
+            environment="dev"
+            values_file="${INFRA_VALUES_DEV}"
+          else
+            environment="prod"
+            values_file="${INFRA_VALUES_PROD}"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "environment=${environment}" >> "$GITHUB_OUTPUT"
+          echo "values_file=${values_file}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -98,10 +115,18 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
+          ENVIRONMENT=${{ needs.prepare.outputs.environment }}
           SOURCES=$(printf '${{ env.IMAGE }}@sha256:%s ' *)
+
+          TAGS=(-t "${{ env.IMAGE }}:${VERSION}")
+          if [[ "$ENVIRONMENT" == "prod" ]]; then
+            TAGS+=(-t "${{ env.IMAGE }}:latest")
+          else
+            TAGS+=(-t "${{ env.IMAGE }}:dev-latest")
+          fi
+
           docker buildx imagetools create \
-            -t "${{ env.IMAGE }}:${VERSION}" \
-            -t "${{ env.IMAGE }}:latest" \
+            "${TAGS[@]}" \
             $SOURCES
           DIGEST=$(docker buildx imagetools inspect "${{ env.IMAGE }}:${VERSION}" \
             --format '{{json .Manifest}}' | jq -r '.digest')
@@ -145,18 +170,20 @@ jobs:
           set -euo pipefail
 
           version="${{ needs.prepare.outputs.version }}"
+          values_file="${{ needs.prepare.outputs.values_file }}"
+          environment="${{ needs.prepare.outputs.environment }}"
 
           export version
-          yq -i '.image.tag = strenv(version)' helm/incidentflow-k8s-agent/values-prod.yaml
+          yq -i '.image.tag = strenv(version)' "$values_file"
 
           git config user.email "ci-bot@incidentflow.io"
           git config user.name "CI Bot"
-          git add helm/incidentflow-k8s-agent/values-prod.yaml
+          git add "$values_file"
 
           if git diff --cached --quiet; then
             echo "No changes to commit. Tag already matches current value."
             exit 0
           fi
 
-          git commit -m "chore(incidentflow-k8s-agent): update prod image tag to ${version} [skip ci]"
+          git commit -m "chore(incidentflow-k8s-agent): update ${environment} image tag to ${version} [skip ci]"
           git push
