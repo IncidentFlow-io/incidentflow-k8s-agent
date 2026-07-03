@@ -2,13 +2,17 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/commands"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/config"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/gateway"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/kube"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/metrics"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/version"
 	"go.uber.org/zap"
@@ -53,7 +57,38 @@ func (a *App) Run(ctx context.Context) error {
 		CommandTimeout:  a.cfg.CommandTimeout,
 		HeartbeatPeriod: a.cfg.HeartbeatPeriod,
 	})
+
+	if srv := a.startMetricsServer(); srv != nil {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shutdownCtx)
+		}()
+	}
+
 	return client.Run(ctx)
+}
+
+// startMetricsServer exposes the Prometheus /metrics endpoint on the configured
+// address. It returns nil (and starts nothing) when the address is empty.
+func (a *App) startMetricsServer() *http.Server {
+	if a.cfg.MetricsAddr == "" {
+		return nil
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	srv := &http.Server{
+		Addr:              a.cfg.MetricsAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		a.logger.Info("metrics server listening", zap.String("addr", a.cfg.MetricsAddr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.logger.Warn("metrics server stopped", zap.Error(err))
+		}
+	}()
+	return srv
 }
 
 func (a *App) identity(ctx context.Context) (auth.Identity, error) {

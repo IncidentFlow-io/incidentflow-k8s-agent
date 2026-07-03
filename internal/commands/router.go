@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/metrics"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
@@ -34,7 +36,15 @@ func (r *Router) Handle(ctx context.Context, cmd apiv1.Command) apiv1.Response {
 		return apiv1.Failure(cmd.ID, code, err.Error())
 	}
 
+	started := time.Now()
 	data, err := r.dispatch(ctx, cmd)
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	// cmd.Action is a bounded, allow-listed value (validated above), so it is
+	// safe as a low-cardinality metric label.
+	metrics.ObserveK8sAPI(cmd.Action, status, time.Since(started).Seconds())
 	if err != nil {
 		code, message := classifyError(err)
 		return apiv1.Failure(cmd.ID, code, message)

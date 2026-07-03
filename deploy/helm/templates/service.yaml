@@ -1,4 +1,23 @@
 {{/*
-IncidentFlow Kubernetes Agent is outbound-only and does not expose an HTTP server.
-This template intentionally renders no Service object.
+IncidentFlow Kubernetes Agent is outbound-only for command handling.
+When metrics are enabled it exposes a ClusterIP Service for the Prometheus
+/metrics endpoint only (no command traffic is served over this Service).
 */}}
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "incidentflow-k8s-agent.fullname" . }}-metrics
+  labels:
+    {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

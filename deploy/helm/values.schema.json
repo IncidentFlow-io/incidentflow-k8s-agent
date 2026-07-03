@@ -12,6 +12,12 @@
     "agent": {
       "additionalProperties": false,
       "properties": {
+        "agentToken": {
+          "default": "",
+          "description": "Pre-issued agent token. When set, the agent uses it directly and skips platform registration.",
+          "title": "agentToken",
+          "type": "string"
+        },
         "clusterName": {
           "default": "",
           "description": "Cluster name shown in the IncidentFlow dashboard. Required.",
@@ -139,6 +145,62 @@
       "description": "Log level for the agent process.\nOne of: debug, info, warn, error.",
       "title": "logLevel",
       "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "description": "Prometheus metrics exposure for the agent.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Expose a Prometheus /metrics HTTP endpoint on the agent.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "port": {
+          "default": 9090,
+          "description": "Port the agent binds its /metrics HTTP server to.",
+          "title": "port",
+          "type": "integer"
+        },
+        "serviceMonitor": {
+          "additionalProperties": false,
+          "description": "Create a Prometheus Operator ServiceMonitor for the metrics endpoint.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Create a ServiceMonitor. Requires the Prometheus Operator CRDs.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "interval": {
+              "default": "30s",
+              "description": "Scrape interval for the ServiceMonitor.",
+              "title": "interval",
+              "type": "string"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Extra labels applied to the ServiceMonitor (e.g. release: prometheus).",
+              "required": [],
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "required": [
+            "enabled",
+            "interval"
+          ],
+          "title": "serviceMonitor",
+          "type": "object"
+        }
+      },
+      "required": [
+        "enabled",
+        "port",
+        "serviceMonitor"
+      ],
+      "title": "metrics",
+      "type": "object"
     },
     "namespaceAllowlist": {
       "description": "Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.",

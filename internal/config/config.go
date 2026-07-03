@@ -16,6 +16,7 @@ const (
 	DefaultMaxTailLines    = int64(1000)
 	DefaultLogTailLines    = int64(200)
 	DefaultMaxLogBytes     = 512 * 1024
+	DefaultMetricsAddr     = ":9090"
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	MaxTailLines       int64
 	DefaultTailLines   int64
 	MaxLogBytes        int64
+	MetricsAddr        string
 }
 
 func Load() (Config, error) {
@@ -49,6 +51,7 @@ func Load() (Config, error) {
 		MaxTailLines:       getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),
 		DefaultTailLines:   getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
 		MaxLogBytes:        getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
+		MetricsAddr:        getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err

@@ -13,6 +13,12 @@ spec:
     metadata:
       labels:
         {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 8 }}
+      {{- if and .Values.metrics.enabled (not .Values.metrics.serviceMonitor.enabled) }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: "/metrics"
+      {{- end }}
     spec:
       serviceAccountName: {{ include "incidentflow-k8s-agent.fullname" . }}
       {{- with .Values.imagePullSecrets }}
@@ -27,6 +33,12 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "incidentflow-k8s-agent.configmapName" . }}
@@ -47,6 +59,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if .Values.metrics.enabled }}
+            - name: INCIDENTFLOW_METRICS_ADDR
+              value: ":{{ .Values.metrics.port }}"
+            {{- else }}
+            - name: INCIDENTFLOW_METRICS_ADDR
+              value: ""
+            {{- end }}
             {{- if .Values.observability.tracing.enabled }}
             - name: OBSERVABILITY_TRACING_ENABLED
               value: "true"

@@ -57,10 +57,10 @@ helm template "${RELEASE_NAME}" ./deploy/helm \
   --set image.repository="${IMAGE_REPOSITORY}" \
   --set image.tag="${IMAGE_TAG}" \
   --set image.pullPolicy=Never \
-  --set clusterName="${CLUSTER_NAME}" \
-  --set platformUrl="${PLATFORM_URL}" \
-  --set gatewayUrl="${GATEWAY_URL}" \
-  --set agentToken="${AGENT_TOKEN}" >/tmp/incidentflow-k8s-agent-rendered.yaml
+  --set agent.clusterName="${CLUSTER_NAME}" \
+  --set agent.platformUrl="${PLATFORM_URL}" \
+  --set agent.gatewayUrl="${GATEWAY_URL}" \
+  --set agent.agentToken="${AGENT_TOKEN}" >/tmp/incidentflow-k8s-agent-rendered.yaml
 
 log "Installing Helm release"
 helm upgrade --install "${RELEASE_NAME}" ./deploy/helm \
@@ -69,13 +69,13 @@ helm upgrade --install "${RELEASE_NAME}" ./deploy/helm \
   --set image.repository="${IMAGE_REPOSITORY}" \
   --set image.tag="${IMAGE_TAG}" \
   --set image.pullPolicy=Never \
-  --set clusterName="${CLUSTER_NAME}" \
-  --set platformUrl="${PLATFORM_URL}" \
-  --set gatewayUrl="${GATEWAY_URL}" \
-  --set agentToken="${AGENT_TOKEN}"
+  --set agent.clusterName="${CLUSTER_NAME}" \
+  --set agent.platformUrl="${PLATFORM_URL}" \
+  --set agent.gatewayUrl="${GATEWAY_URL}" \
+  --set agent.agentToken="${AGENT_TOKEN}"
 
 log "Waiting for Deployment availability"
-if ! kubectl -n "${NAMESPACE}" rollout status "deployment/${RELEASE_NAME}-${RELEASE_NAME}" --timeout=90s; then
+if ! kubectl -n "${NAMESPACE}" rollout status "deployment/${RELEASE_NAME}" --timeout=90s; then
   printf '\nDeployment did not become Available within timeout. Showing diagnostics.\n' >&2
 fi
 
@@ -85,7 +85,7 @@ kubectl -n "${NAMESPACE}" get pods -o wide
 log "Recent logs"
 kubectl -n "${NAMESPACE}" logs -l app.kubernetes.io/name=incidentflow-k8s-agent --tail=80 || true
 
-SERVICE_ACCOUNT="${RELEASE_NAME}-${RELEASE_NAME}"
+SERVICE_ACCOUNT="${RELEASE_NAME}"
 AS_USER="system:serviceaccount:${NAMESPACE}:${SERVICE_ACCOUNT}"
 
 log "RBAC checks"

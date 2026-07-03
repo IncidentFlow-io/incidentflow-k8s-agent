@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/metrics"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
 	"go.opentelemetry.io/otel/attribute"
@@ -61,6 +62,7 @@ func NewClient(opts Options) *Client {
 
 func (c *Client) Run(ctx context.Context) error {
 	backoff := NewBackoff(time.Second, 30*time.Second)
+	connectedOnce := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -74,9 +76,15 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 			continue
 		}
+		if connectedOnce {
+			metrics.IncGatewayReconnect()
+		}
+		connectedOnce = true
 		c.logger.Info("connected to IncidentFlow Agent Gateway")
+		metrics.SetGatewayConnected(true)
 		backoff.Reset()
 		err = c.serveConnection(ctx, conn)
+		metrics.SetGatewayConnected(false)
 		_ = conn.Close()
 		if errors.Is(err, context.Canceled) {
 			return err

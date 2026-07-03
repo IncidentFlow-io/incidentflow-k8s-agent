@@ -24,6 +24,9 @@ agent:
   # -- Registration token issued by the IncidentFlow platform. Passed by the CLI during install.
   # Never commit a real token here — supply it via --set or a sealed secret.
   registrationToken: ""
+  # -- Pre-issued agent token. When set, the agent uses it directly and skips
+  # platform registration (useful for smoke tests / air-gapped installs).
+  agentToken: ""
 
 # -- Log level for the agent process.
 # One of: debug, info, warn, error.
@@ -94,6 +97,21 @@ observability:
     otlpEndpoint: ""
   # -- Deployment environment label included in trace metadata (e.g. production, staging).
   environment: "production"
+
+metrics:
+  # -- Expose a Prometheus /metrics HTTP endpoint on the agent.
+  enabled: true
+  # -- Port the agent binds its /metrics HTTP server to.
+  port: 9090
+  serviceMonitor:
+    # -- Create a Prometheus Operator ServiceMonitor for the metrics endpoint.
+    # Requires the Prometheus Operator CRDs to be installed in the cluster.
+    enabled: false
+    # -- Scrape interval for the ServiceMonitor.
+    interval: 30s
+    # -- Extra labels applied to the ServiceMonitor (e.g. `release: prometheus`).
+    # @default -- `{}`
+    labels: {}
 
 # -- Node selector applied to the agent pod.
 # @default -- `{}` (schedule on any node)

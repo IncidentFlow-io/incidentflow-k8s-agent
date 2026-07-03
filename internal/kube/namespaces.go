@@ -5,6 +5,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/metrics"
 )
 
 func (s *Service) ListNamespaces(ctx context.Context) ([]Namespace, error) {
@@ -12,9 +14,11 @@ func (s *Service) ListNamespaces(ctx context.Context) ([]Namespace, error) {
 	if len(s.nsCache) > 0 && time.Since(s.nsCachedAt) < namespaceCacheTTL {
 		cached := s.nsCache
 		s.nsMu.Unlock()
+		metrics.IncCacheResult("hit")
 		return cached, nil
 	}
 	s.nsMu.Unlock()
+	metrics.IncCacheResult("miss")
 
 	// singleflight collapses concurrent cache-miss fetches into one API call.
 	v, err, _ := s.nsSf.Do("list", func() (any, error) {
