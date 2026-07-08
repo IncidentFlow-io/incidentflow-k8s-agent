@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/commands"
@@ -10,6 +13,7 @@ import (
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/gateway"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/kube"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/telemetry"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/version"
 	"go.uber.org/zap"
 )
@@ -31,6 +35,20 @@ func (a *App) Run(ctx context.Context) error {
 	kubeService, err := kube.NewInClusterService()
 	if err != nil {
 		return err
+	}
+	if a.cfg.MetricsAddr != "" {
+		metricsSrv := telemetry.NewMetricsServer(a.cfg.MetricsAddr)
+		go func() {
+			a.logger.Info("serving Prometheus metrics", zap.String("addr", a.cfg.MetricsAddr))
+			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				a.logger.Warn("metrics server stopped", zap.Error(err))
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = metricsSrv.Shutdown(shutdownCtx)
+		}()
 	}
 	guard := security.NewNamespaceGuard(a.cfg.NamespaceAllowlist)
 	limits := security.Limits{

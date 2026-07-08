@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/auth"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/telemetry"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -75,12 +76,15 @@ func (c *Client) Run(ctx context.Context) error {
 			continue
 		}
 		c.logger.Info("connected to IncidentFlow Agent Gateway")
+		telemetry.GatewayConnected.Set(1)
 		backoff.Reset()
 		err = c.serveConnection(ctx, conn)
+		telemetry.GatewayConnected.Set(0)
 		_ = conn.Close()
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
+		telemetry.GatewayReconnects.Inc()
 		c.logger.Warn("gateway connection closed; reconnecting", zap.Error(err))
 	}
 }
@@ -181,6 +185,9 @@ func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd ap
 	)
 
 	resp := c.handler.Handle(cmdCtx, cmd)
+	telemetry.K8sAPIDuration.
+		WithLabelValues(cmd.Action, metricStatus(resp.Status)).
+		Observe(time.Since(started).Seconds())
 	span.SetAttributes(attribute.String("command.status", resp.Status))
 	if resp.Status != apiv1.StatusSuccess {
 		if resp.Error != nil {
@@ -208,6 +215,15 @@ func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd ap
 		zap.String("status", resp.Status),
 		zap.Duration("duration", time.Since(started)),
 	)
+}
+
+// metricStatus maps a command response status to the bounded label set used by
+// the k8s_api_duration_seconds metric ("success" or "error").
+func metricStatus(status string) string {
+	if status == apiv1.StatusSuccess {
+		return "success"
+	}
+	return "error"
 }
 
 func sleepContext(ctx context.Context, d time.Duration) bool {
