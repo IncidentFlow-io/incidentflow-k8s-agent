@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"golang.org/x/sync/singleflight"
 )
 
 const namespaceCacheTTL = 30 * time.Second
@@ -59,10 +59,11 @@ type Pod struct {
 }
 
 type ContainerStatus struct {
-	Name         string `json:"name"`
-	Ready        bool   `json:"ready"`
-	RestartCount int32  `json:"restart_count"`
-	Image        string `json:"image"`
+	Name          string `json:"name"`
+	Ready         bool   `json:"ready"`
+	RestartCount  int32  `json:"restart_count"`
+	LastRestartAt string `json:"last_restart_at,omitempty"`
+	Image         string `json:"image"`
 }
 
 type LogResult struct {
