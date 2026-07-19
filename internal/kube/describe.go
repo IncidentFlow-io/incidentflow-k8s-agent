@@ -46,12 +46,13 @@ type PodCondition struct {
 }
 
 type DescribedContainer struct {
-	Name         string          `json:"name"`
-	Image        string          `json:"image"` // digest stripped
-	Ready        bool            `json:"ready"`
-	State        ContainerState  `json:"state"`
-	LastState    *ContainerState `json:"last_state,omitempty"`
-	RestartCount int32           `json:"restart_count"`
+	Name          string          `json:"name"`
+	Image         string          `json:"image"` // digest stripped
+	Ready         bool            `json:"ready"`
+	State         ContainerState  `json:"state"`
+	LastState     *ContainerState `json:"last_state,omitempty"`
+	RestartCount  int32           `json:"restart_count"`
+	LastRestartAt string          `json:"last_restart_at,omitempty"`
 }
 
 type ContainerState struct {
@@ -240,11 +241,12 @@ func toPodDescription(pod corev1.Pod, events []Event) PodDescription {
 			image = stripImageDigest(cs.Image)
 		}
 		dc := DescribedContainer{
-			Name:         cs.Name,
-			Image:        image,
-			Ready:        cs.Ready,
-			State:        toContainerState(cs.State),
-			RestartCount: cs.RestartCount,
+			Name:          cs.Name,
+			Image:         image,
+			Ready:         cs.Ready,
+			State:         toContainerState(cs.State),
+			RestartCount:  cs.RestartCount,
+			LastRestartAt: lastRestartAt(cs),
 		}
 		if isNonEmptyState(cs.LastTerminationState) {
 			ls := toContainerState(cs.LastTerminationState)

@@ -36,10 +36,11 @@ func toPod(pod corev1.Pod) Pod {
 	}
 	for _, status := range pod.Status.ContainerStatuses {
 		containers = append(containers, ContainerStatus{
-			Name:         status.Name,
-			Ready:        status.Ready,
-			RestartCount: status.RestartCount,
-			Image:        images[status.Name],
+			Name:          status.Name,
+			Ready:         status.Ready,
+			RestartCount:  status.RestartCount,
+			LastRestartAt: lastRestartAt(status),
+			Image:         images[status.Name],
 		})
 	}
 	return Pod{
@@ -51,6 +52,14 @@ func toPod(pod corev1.Pod) Pod {
 		Containers: containers,
 		Age:        age(pod.CreationTimestamp.Time),
 	}
+}
+
+func lastRestartAt(status corev1.ContainerStatus) string {
+	term := status.LastTerminationState.Terminated
+	if term == nil || term.FinishedAt.IsZero() {
+		return ""
+	}
+	return term.FinishedAt.Format("2006-01-02T15:04:05Z07:00")
 }
 
 func age(created time.Time) string {
