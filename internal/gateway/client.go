@@ -18,21 +18,24 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultMaxConcurrentCommands = 8
+
 type Handler interface {
 	Handle(ctx context.Context, cmd apiv1.Command) apiv1.Response
 }
 
 type Client struct {
-	gatewayURL      string
-	identity        auth.Identity
-	clusterName     string
-	version         string
-	logger          *zap.Logger
-	handler         Handler
-	commandTimeout  time.Duration
-	heartbeatPeriod time.Duration
-	dialer          Dialer
-	writeMu         sync.Mutex
+	gatewayURL            string
+	identity              auth.Identity
+	clusterName           string
+	version               string
+	logger                *zap.Logger
+	handler               Handler
+	commandTimeout        time.Duration
+	heartbeatPeriod       time.Duration
+	dialer                Dialer
+	writeMu               sync.Mutex
+	maxConcurrentCommands int
 }
 
 type Options struct {
@@ -44,19 +47,27 @@ type Options struct {
 	Handler         Handler
 	CommandTimeout  time.Duration
 	HeartbeatPeriod time.Duration
+	// MaxConcurrentCommands bounds in-flight Kubernetes commands per connection.
+	// Zero uses a safe default.
+	MaxConcurrentCommands int
 }
 
 func NewClient(opts Options) *Client {
+	maxConcurrentCommands := opts.MaxConcurrentCommands
+	if maxConcurrentCommands <= 0 {
+		maxConcurrentCommands = defaultMaxConcurrentCommands
+	}
 	return &Client{
-		gatewayURL:      opts.GatewayURL,
-		identity:        opts.Identity,
-		clusterName:     opts.ClusterName,
-		version:         opts.Version,
-		logger:          opts.Logger,
-		handler:         opts.Handler,
-		commandTimeout:  opts.CommandTimeout,
-		heartbeatPeriod: opts.HeartbeatPeriod,
-		dialer:          websocket.DefaultDialer,
+		gatewayURL:            opts.GatewayURL,
+		identity:              opts.Identity,
+		clusterName:           opts.ClusterName,
+		version:               opts.Version,
+		logger:                opts.Logger,
+		handler:               opts.Handler,
+		commandTimeout:        opts.CommandTimeout,
+		heartbeatPeriod:       opts.HeartbeatPeriod,
+		dialer:                websocket.DefaultDialer,
+		maxConcurrentCommands: maxConcurrentCommands,
 	}
 }
 
@@ -80,7 +91,6 @@ func (c *Client) Run(ctx context.Context) error {
 		backoff.Reset()
 		err = c.serveConnection(ctx, conn)
 		telemetry.GatewayConnected.Set(0)
-		_ = conn.Close()
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -90,28 +100,36 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) serveConnection(ctx context.Context, conn *websocket.Conn) error {
-	// connCtx is cancelled when this connection ends, stopping in-flight handlers.
+	// Cancelling connCtx stops all commands from this connection. Closing the
+	// socket unblocks ReadMessage and any in-progress write immediately.
 	connCtx, connCancel := context.WithCancel(ctx)
-	defer connCancel()
-
-	var wg sync.WaitGroup
-	defer wg.Wait() // drain in-flight handleCommand goroutines before conn.Close()
+	var commandWG sync.WaitGroup
+	var loopWG sync.WaitGroup
+	commandSem := make(chan struct{}, c.maxConcurrentCommands)
 
 	errCh := make(chan error, 2)
-	go c.heartbeat(connCtx, conn, errCh)
-	go c.readLoop(connCtx, conn, &wg, errCh)
+	loopWG.Add(2)
+	go func() {
+		defer loopWG.Done()
+		c.heartbeat(connCtx, conn, errCh)
+	}()
+	go func() {
+		defer loopWG.Done()
+		c.readLoop(connCtx, conn, &commandWG, commandSem, errCh)
+	}()
 
+	var result error
 	select {
 	case <-ctx.Done():
-		_ = conn.WriteControl(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"),
-			time.Now().Add(5*time.Second),
-		)
-		return ctx.Err()
+		result = ctx.Err()
 	case err := <-errCh:
-		return err
+		result = err
 	}
+	connCancel()
+	_ = conn.Close()
+	loopWG.Wait()
+	commandWG.Wait()
+	return result
 }
 
 func (c *Client) heartbeat(ctx context.Context, conn *websocket.Conn, errCh chan<- error) {
@@ -130,18 +148,18 @@ func (c *Client) heartbeat(ctx context.Context, conn *websocket.Conn, errCh chan
 			}
 			c.writeMu.Unlock()
 			if pingErr != nil {
-				errCh <- pingErr
+				reportConnectionError(ctx, errCh, pingErr)
 				return
 			}
 		}
 	}
 }
 
-func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.WaitGroup, errCh chan<- error) {
+func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.WaitGroup, commandSem chan struct{}, errCh chan<- error) {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			errCh <- err
+			reportConnectionError(ctx, errCh, err)
 			return
 		}
 		cmd, err := DecodeCommand(data)
@@ -153,11 +171,27 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 			zap.String("command_id", cmd.ID),
 			zap.String("action", cmd.Action),
 		)
+		select {
+		case commandSem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { <-commandSem }()
 			c.handleCommand(ctx, conn, cmd)
 		}()
+	}
+}
+
+// reportConnectionError never blocks a shutdown path. The first error wakes
+// serveConnection; subsequent errors are irrelevant once the socket is closed.
+func reportConnectionError(ctx context.Context, errCh chan<- error, err error) {
+	select {
+	case errCh <- err:
+	case <-ctx.Done():
+	default:
 	}
 }
 

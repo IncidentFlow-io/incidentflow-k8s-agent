@@ -23,7 +23,9 @@ func TestVersionDoesNotRequireConfig(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("run --version exit code = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "incidentflow-k8s-agent") {
+	if !strings.Contains(stdout.String(), "IncidentFlow Kubernetes Agent") ||
+		!strings.Contains(stdout.String(), "Version:") ||
+		!strings.Contains(stdout.String(), "Commit:") {
 		t.Fatalf("version output = %q", stdout.String())
 	}
 }
