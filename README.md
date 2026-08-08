@@ -31,8 +31,8 @@ helm install incidentflow-k8s-agent \
   --version 1.0.6 \
   --namespace incidentflow-agent \
   --create-namespace \
-  --set agent.clusterName=prod-us-east \
-  --set agent.registrationToken=<your-token>
+  --set clusterName=prod-us-east \
+  --set registrationToken=<your-token>
 ```
 
 ### Install via IncidentFlow CLI
@@ -53,20 +53,20 @@ Key environment variables injected by the Helm chart:
 |---|---|---|
 | `INCIDENTFLOW_PLATFORM_URL` | yes | Platform API base URL |
 | `INCIDENTFLOW_GATEWAY_URL` | yes | WebSocket gateway URL |
-| `INCIDENTFLOW_REGISTRATION_TOKEN` | on first start | One-time registration token |
-| `INCIDENTFLOW_AGENT_TOKEN` | after registration | Persistent agent token (stored in `/var/lib/incidentflow/agent-token`) |
+| `INCIDENTFLOW_REGISTRATION_TOKEN` | only when no credentials exist | One-time registration token |
+| `INCIDENTFLOW_CREDENTIALS_SECRET_NAME` | yes | Kubernetes Secret containing permanent `agent_id` and `agent_token` |
 | `INCIDENTFLOW_CLUSTER_NAME` | yes | Cluster identifier shown in the dashboard |
 | `INCIDENTFLOW_LOG_LEVEL` | no | Log level — `debug`, `info`, `warn`, `error`. Defaults to `info` |
 | `INCIDENTFLOW_NAMESPACE_ALLOWLIST` | no | Comma-separated namespace allowlist. Empty means all non-system namespaces |
 
-## Token persistence
+## Token lifecycle
 
-On first start the agent exchanges the registration token for a persistent agent token and stores it in `/var/lib/incidentflow/agent-token`.
+On first start the agent exchanges the one-time registration token for a permanent agent ID and agent token. It stores these only in the namespaced Kubernetes Secret `incidentflow-agent-credentials`. On restart it reads that Secret first, so no registration token or PVC is required.
 
-By default `persistence.enabled=false` — the token store uses an `emptyDir` and the token is lost on pod restart. Enable a PVC for production clusters where you do not want to re-register after restarts:
+The Helm chart pre-creates the empty credentials Secret and grants the agent only `get`, `update`, and `patch` access to that exact Secret. It does not grant Secret list access or write access to any other Secret. If the namespace or credentials Secret is deleted, install again with a newly issued registration token.
 
 ```sh
-helm upgrade incidentflow-k8s-agent ... --set persistence.enabled=true
+helm upgrade --install incidentflow-k8s-agent ... --set registrationToken=<new-one-time-token>
 ```
 
 ## Supported commands
@@ -84,8 +84,8 @@ helm upgrade incidentflow-k8s-agent ... --set persistence.enabled=true
 
 ## Security model
 
-- Read-only Kubernetes RBAC — no write permissions of any kind.
-- No access to Secrets.
+- Read-only Kubernetes RBAC for workloads.
+- Minimal credentials Secret access: the agent can only get/update/patch its own credentials Secret.
 - No exec, apply, delete, patch, or mutation commands.
 - System namespaces are always blocked: `kube-system`, `kube-public`, `kube-node-lease`.
 - Optional namespace allowlist further restricts scope.

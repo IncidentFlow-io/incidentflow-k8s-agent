@@ -70,4 +70,3 @@ func toDeployment(deployment appsv1.Deployment) Deployment {
 		Age:               age(deployment.CreationTimestamp.Time),
 	}
 }
-

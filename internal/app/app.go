@@ -75,31 +75,35 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) identity(ctx context.Context) (auth.Identity, error) {
+	store, err := auth.NewInClusterCredentialStore(a.cfg.Namespace, a.cfg.CredentialsSecretName)
+	if err != nil {
+		return auth.Identity{}, fmt.Errorf("create credentials store: %w", err)
+	}
+	identity, err := store.Load(ctx)
+	if err != nil {
+		return auth.Identity{}, fmt.Errorf("load agent credentials: %w", err)
+	}
+	if identity.Valid() {
+		return identity, nil
+	}
+	// Compatibility with pre-Secret installations. New chart releases never set
+	// this value; permanent credentials are always read from the Secret first.
 	if a.cfg.AgentToken != "" {
 		return auth.Identity{Token: a.cfg.AgentToken}, nil
 	}
-	store := auth.NewTokenStore(a.cfg.TokenFile)
-	token, err := store.Load()
-	if err != nil {
-		return auth.Identity{}, fmt.Errorf("load agent token: %w", err)
-	}
-	if token != "" {
-		return auth.Identity{Token: token}, nil
-	}
 	registrar := auth.NewRegistrar(a.cfg.PlatformURL, a.cfg.RegistrationToken)
-	identity, err := registrar.Register(ctx, a.cfg.ClusterName, version.Version)
+	identity, registered, err := auth.Bootstrap(ctx, store, registrar, a.cfg.RegistrationToken, a.cfg.ClusterName, version.Version)
 	if err != nil {
 		return auth.Identity{}, fmt.Errorf("register agent: %w", err)
 	}
-	if err := store.Save(identity.Token); err != nil {
-		return auth.Identity{}, fmt.Errorf("persist agent token: %w", err)
+	if registered {
+		a.logger.Info(
+			"registered IncidentFlow agent",
+			zap.String("agent_id", identity.AgentID),
+			zap.String("cluster_id", identity.ClusterID),
+			zap.String("gateway_url", identity.GatewayURL),
+		)
 	}
-	a.logger.Info(
-		"registered IncidentFlow agent",
-		zap.String("agent_id", identity.AgentID),
-		zap.String("cluster_id", identity.ClusterID),
-		zap.String("gateway_url", identity.GatewayURL),
-	)
 	// Use the gateway URL from registration if the platform returned one,
 	// falling back to the configured value.
 	if identity.GatewayURL == "" {

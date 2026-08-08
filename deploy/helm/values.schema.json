@@ -32,8 +32,20 @@
         },
         "registrationToken": {
           "default": "",
-          "description": "Registration token issued by the IncidentFlow platform. Passed by the CLI during install.\nNever commit a real token here — supply it via --set or a sealed secret.",
+          "description": "One-time, short-lived bootstrap token issued by the IncidentFlow platform.",
           "title": "registrationToken",
+          "type": "string"
+        },
+        "registrationTokenSecretName": {
+          "default": "",
+          "description": "Existing Secret holding registration-token. Takes precedence over registrationToken.",
+          "title": "registrationTokenSecretName",
+          "type": "string"
+        },
+        "credentialsSecretName": {
+          "default": "incidentflow-agent-credentials",
+          "description": "Secret where the agent persists agent_id and agent_token after bootstrap.",
+          "title": "credentialsSecretName",
           "type": "string"
         }
       },
@@ -41,10 +53,32 @@
         "clusterName",
         "platformUrl",
         "gatewayUrl",
-        "registrationToken"
+        "registrationToken",
+        "registrationTokenSecretName",
+        "credentialsSecretName"
       ],
       "title": "agent",
       "type": "object"
+    },
+    "clusterName": {
+      "default": "",
+      "description": "Cluster name shown in the IncidentFlow dashboard. Required for first registration.",
+      "type": "string"
+    },
+    "registrationToken": {
+      "default": "",
+      "description": "One-time, short-lived bootstrap token. This is the only token an installer supplies.",
+      "type": "string"
+    },
+    "registrationTokenSecretName": {
+      "default": "",
+      "description": "Existing Secret holding registration-token; takes precedence over registrationToken.",
+      "type": "string"
+    },
+    "credentialsSecretName": {
+      "default": "",
+      "description": "Secret where permanent agent credentials are stored after bootstrap.",
+      "type": "string"
     },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",

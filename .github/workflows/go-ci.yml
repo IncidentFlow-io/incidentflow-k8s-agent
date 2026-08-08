@@ -1,0 +1,68 @@
+name: Go CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run full test suite (verbose)
+        run: go test -v ./...
+
+      - name: Run full test suite with race detector and coverage
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./... | tee test-output.txt
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo '## Go coverage'
+            echo
+            if [ -f coverage.out ]; then
+              echo '| Package | Statement coverage |'
+              echo '| --- | ---: |'
+              awk '/coverage: [0-9.]+% of statements/ { pkg = ($1 == "ok" || $1 == "?") ? $2 : $1; printf "| `%s` | %s |\n", pkg, $(NF-2) }' test-output.txt
+              echo
+              echo '### Total'
+              echo
+              echo '```text'
+              go tool cover -func=coverage.out | tail -n 1
+              echo '```'
+              echo
+              echo 'Download **go-coverage-report** below for `coverage.out` and the full test log.'
+            else
+              echo '> Coverage report was not generated because the test step failed before writing it.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-coverage-report
+          path: |
+            coverage.out
+            test-output.txt
+          if-no-files-found: warn
+          retention-days: 14
