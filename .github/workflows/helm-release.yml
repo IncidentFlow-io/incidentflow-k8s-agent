@@ -73,7 +73,7 @@ jobs:
           CHART_NAME: ${{ env.CHART_NAME }}
           CHART_REGISTRY: ${{ env.CHART_REGISTRY }}
 
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v3
 
       - name: Sign Helm chart (keyless)
         run: |

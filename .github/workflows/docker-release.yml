@@ -132,7 +132,7 @@ jobs:
             --format '{{json .Manifest}}' | jq -r '.digest')
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v3
 
       - name: Sign Docker image (keyless)
         run: |
