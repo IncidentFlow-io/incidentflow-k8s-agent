@@ -31,6 +31,7 @@ type Config struct {
 	CredentialsSecretName string
 	Namespace             string
 	NamespaceAllowlist    []string
+	NamespaceDenylist     []string
 	CommandTimeout        time.Duration
 	HeartbeatPeriod       time.Duration
 	MaxTailLines          int64
@@ -51,6 +52,7 @@ func Load() (Config, error) {
 		CredentialsSecretName: getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
 		Namespace:             getenv("K8S_NAMESPACE_NAME", "default"),
 		NamespaceAllowlist:    splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
+		NamespaceDenylist:     splitCSV(getenv("INCIDENTFLOW_NAMESPACE_DENYLIST", "kube-system,kube-public,kube-node-lease")),
 		CommandTimeout:        getenvDuration("INCIDENTFLOW_COMMAND_TIMEOUT", DefaultCommandTimeout),
 		HeartbeatPeriod:       getenvDuration("INCIDENTFLOW_HEARTBEAT_PERIOD", DefaultHeartbeatPeriod),
 		MaxTailLines:          getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),

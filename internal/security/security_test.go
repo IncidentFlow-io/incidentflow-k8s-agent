@@ -6,7 +6,7 @@ import (
 )
 
 func TestNamespaceGuard(t *testing.T) {
-	guard := NewNamespaceGuard([]string{"prod"})
+	guard := NewNamespaceGuard([]string{"prod"}, defaultDeniedNamespaces)
 	if err := guard.Check("prod"); err != nil {
 		t.Fatalf("prod should be allowed: %v", err)
 	}
@@ -15,6 +15,16 @@ func TestNamespaceGuard(t *testing.T) {
 	}
 	if err := guard.Check("kube-system"); err == nil {
 		t.Fatal("kube-system should always be denied")
+	}
+}
+
+func TestNamespaceGuardSupportsAdditionalDeniedNamespaces(t *testing.T) {
+	guard := NewNamespaceGuard(nil, append(defaultDeniedNamespaces, "monitoring"))
+	if err := guard.Check("monitoring"); err == nil {
+		t.Fatal("custom denied namespace should be excluded")
+	}
+	if err := guard.Check("production"); err != nil {
+		t.Fatalf("production should be allowed: %v", err)
 	}
 }
 

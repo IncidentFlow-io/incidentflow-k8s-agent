@@ -50,7 +50,7 @@ func (a *App) Run(ctx context.Context) error {
 			_ = metricsSrv.Shutdown(shutdownCtx)
 		}()
 	}
-	guard := security.NewNamespaceGuard(a.cfg.NamespaceAllowlist)
+	guard := security.NewNamespaceGuard(a.cfg.NamespaceAllowlist, a.cfg.NamespaceDenylist)
 	limits := security.Limits{
 		DefaultTailLines: a.cfg.DefaultTailLines,
 		MaxTailLines:     a.cfg.MaxTailLines,

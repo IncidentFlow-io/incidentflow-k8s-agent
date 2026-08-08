@@ -39,7 +39,7 @@ func (fakeKube) DescribePod(context.Context, string, string) (kube.PodDescriptio
 }
 
 func TestRouterRejectsUnsupportedAction(t *testing.T) {
-	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
 	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: "k8s.delete_pod"})
 	if resp.Status != apiv1.StatusError || resp.Error.Code != apiv1.ErrUnsupportedAction {
 		t.Fatalf("unexpected response: %#v", resp)
@@ -48,7 +48,7 @@ func TestRouterRejectsUnsupportedAction(t *testing.T) {
 
 func TestRouterDeniesNamespace(t *testing.T) {
 	params, _ := json.Marshal(apiv1.ListPodsParams{Namespace: "kube-system"})
-	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
 	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionListPods, Params: params})
 	if resp.Status != apiv1.StatusError || resp.Error.Code != apiv1.ErrNamespaceDenied {
 		t.Fatalf("unexpected response: %#v", resp)
@@ -56,7 +56,7 @@ func TestRouterDeniesNamespace(t *testing.T) {
 }
 
 func TestRouterFiltersDeniedNamespaces(t *testing.T) {
-	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
 	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionListNamespaces})
 	if resp.Status != apiv1.StatusSuccess {
 		t.Fatalf("unexpected response: %#v", resp)
