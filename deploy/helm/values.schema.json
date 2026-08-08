@@ -182,6 +182,14 @@
       "title": "namespaceAllowlist",
       "type": "array"
     },
+    "namespaceDenylist": {
+      "description": "Namespaces the agent must never expose to IncidentFlow/MCP.",
+      "items": {
+        "type": "string"
+      },
+      "title": "namespaceDenylist",
+      "type": "array"
+    },
     "nodeSelector": {
       "additionalProperties": false,
       "description": "Node selector applied to the agent pod.",

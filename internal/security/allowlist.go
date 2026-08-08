@@ -4,21 +4,30 @@ import (
 	"fmt"
 )
 
-var dangerousNamespaces = map[string]struct{}{
-	"kube-system":     {},
-	"kube-public":     {},
-	"kube-node-lease": {},
+var defaultDeniedNamespaces = []string{
+	"kube-system",
+	"kube-public",
+	"kube-node-lease",
 }
 
 type NamespaceGuard struct {
 	allowlist map[string]struct{}
+	denylist  map[string]struct{}
 }
 
-func NewNamespaceGuard(allowed []string) NamespaceGuard {
-	guard := NamespaceGuard{allowlist: map[string]struct{}{}}
+func NewNamespaceGuard(allowed, denied []string) NamespaceGuard {
+	guard := NamespaceGuard{allowlist: map[string]struct{}{}, denylist: map[string]struct{}{}}
+	if denied == nil {
+		denied = defaultDeniedNamespaces
+	}
 	for _, namespace := range allowed {
 		if namespace != "" {
 			guard.allowlist[namespace] = struct{}{}
+		}
+	}
+	for _, namespace := range denied {
+		if namespace != "" {
+			guard.denylist[namespace] = struct{}{}
 		}
 	}
 	return guard
@@ -28,7 +37,7 @@ func (g NamespaceGuard) Check(namespace string) error {
 	if namespace == "" {
 		return nil
 	}
-	if _, denied := dangerousNamespaces[namespace]; denied {
+	if _, denied := g.denylist[namespace]; denied {
 		return fmt.Errorf("namespace %q is denied", namespace)
 	}
 	if len(g.allowlist) == 0 {

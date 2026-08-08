@@ -44,6 +44,14 @@ namespaceAllowlist: []
 # - production
 # - staging
 
+# -- Namespaces the agent must never expose to IncidentFlow/MCP. Add internal
+# namespaces here without changing agent code.
+namespaceDenylist:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+# - monitoring
+
 limits:
   # -- Default number of log lines returned when the caller does not specify a limit.
   defaultTailLines: 200
