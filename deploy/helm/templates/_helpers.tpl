@@ -21,9 +21,21 @@ Avoid double-name when Release.Name already contains the chart name.
 {{- printf "%s-config" (include "incidentflow-k8s-agent.fullname" .) -}}
 {{- end -}}
 
-{{/* Credentials secret uses a fixed name independent of release name. */}}
 {{- define "incidentflow-k8s-agent.secretName" -}}
-{{- "incidentflow-agent-credentials" -}}
+{{- default .Values.agent.credentialsSecretName .Values.credentialsSecretName -}}
+{{- end -}}
+
+{{- define "incidentflow-k8s-agent.bootstrapSecretName" -}}
+{{- $legacy := .Values.agent.registrationTokenSecretName -}}
+{{- default (printf "%s-bootstrap" (include "incidentflow-k8s-agent.fullname" .)) (default $legacy .Values.registrationTokenSecretName) -}}
+{{- end -}}
+
+{{- define "incidentflow-k8s-agent.registrationToken" -}}
+{{- default .Values.agent.registrationToken .Values.registrationToken -}}
+{{- end -}}
+
+{{- define "incidentflow-k8s-agent.clusterName" -}}
+{{- default .Release.Name (default .Values.agent.clusterName .Values.clusterName) -}}
 {{- end -}}
 
 {{- define "incidentflow-k8s-agent.pvcName" -}}

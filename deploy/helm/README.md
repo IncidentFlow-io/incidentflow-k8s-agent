@@ -9,10 +9,16 @@ Outbound-only Kubernetes agent for IncidentFlow
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` (no affinity rules) | Affinity rules applied to the agent pod. |
-| agent.clusterName | string | `""` | Cluster name shown in the IncidentFlow dashboard. Required. |
+| clusterName | string | `""` | Cluster name shown in the IncidentFlow dashboard. Required for first registration. |
+| registrationToken | string | `""` | One-time bootstrap token. This is the only token an installer supplies. |
+| registrationTokenSecretName | string | `""` | Existing Secret holding `registration-token`; takes precedence over `registrationToken`. |
+| credentialsSecretName | string | `"incidentflow-agent-credentials"` | Secret where permanent `agent_id` and `agent_token` are stored after bootstrap. |
+| agent.clusterName | string | `""` | Deprecated compatibility alias for `clusterName`. |
 | agent.gatewayUrl | string | `""` | IncidentFlow agent gateway WebSocket URL. Defaults to the hosted gateway when empty. |
 | agent.platformUrl | string | `""` | IncidentFlow platform API URL. Defaults to the hosted platform when empty. |
-| agent.registrationToken | string | `""` | Registration token issued by the IncidentFlow platform. Passed by the CLI during install. Never commit a real token here — supply it via --set or a sealed secret. |
+| agent.credentialsSecretName | string | `"incidentflow-agent-credentials"` | Deprecated compatibility alias for `credentialsSecretName`. |
+| agent.registrationToken | string | `""` | Deprecated compatibility alias for `registrationToken`. |
+| agent.registrationTokenSecretName | string | `""` | Deprecated compatibility alias for `registrationTokenSecretName`. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
 | image.repository | string | `"ghcr.io/incidentflow-io/incidentflow-k8s-agent"` | Docker image repository. |
 | image.tag | string | `""` | Image tag. Defaults to the chart appVersion when empty. |

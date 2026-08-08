@@ -31,17 +31,13 @@ spec:
             - configMapRef:
                 name: {{ include "incidentflow-k8s-agent.configmapName" . }}
           env:
+            - name: INCIDENTFLOW_CREDENTIALS_SECRET_NAME
+              value: {{ include "incidentflow-k8s-agent.secretName" . | quote }}
             - name: INCIDENTFLOW_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.secretName" . }}
+                  name: {{ include "incidentflow-k8s-agent.bootstrapSecretName" . }}
                   key: registration-token
-                  optional: true
-            - name: INCIDENTFLOW_AGENT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.secretName" . }}
-                  key: agent-token
                   optional: true
             - name: K8S_NAMESPACE_NAME
               valueFrom:

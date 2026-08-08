@@ -10,48 +10,53 @@ import (
 )
 
 const (
-	DefaultTokenFile       = "/var/lib/incidentflow/agent-token"
-	DefaultCommandTimeout  = 30 * time.Second
-	DefaultHeartbeatPeriod = 30 * time.Second
-	DefaultMaxTailLines    = int64(1000)
-	DefaultLogTailLines    = int64(200)
-	DefaultMaxLogBytes     = 512 * 1024
-	DefaultMetricsAddr     = ":9090"
+	DefaultTokenFile             = "/var/lib/incidentflow/agent-token"
+	DefaultCredentialsSecretName = "incidentflow-agent-credentials"
+	DefaultCommandTimeout        = 30 * time.Second
+	DefaultHeartbeatPeriod       = 30 * time.Second
+	DefaultMaxTailLines          = int64(1000)
+	DefaultLogTailLines          = int64(200)
+	DefaultMaxLogBytes           = 512 * 1024
+	DefaultMetricsAddr           = ":9090"
 )
 
 type Config struct {
-	PlatformURL        string
-	GatewayURL         string
-	RegistrationToken  string
-	AgentToken         string
-	ClusterName        string
-	LogLevel           string
-	TokenFile          string
-	NamespaceAllowlist []string
-	CommandTimeout     time.Duration
-	HeartbeatPeriod    time.Duration
-	MaxTailLines       int64
-	DefaultTailLines   int64
-	MaxLogBytes        int64
-	MetricsAddr        string
+	PlatformURL           string
+	GatewayURL            string
+	RegistrationToken     string
+	AgentToken            string
+	ClusterName           string
+	LogLevel              string
+	TokenFile             string
+	CredentialsSecretName string
+	Namespace             string
+	NamespaceAllowlist    []string
+	CommandTimeout        time.Duration
+	HeartbeatPeriod       time.Duration
+	MaxTailLines          int64
+	DefaultTailLines      int64
+	MaxLogBytes           int64
+	MetricsAddr           string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		PlatformURL:        strings.TrimRight(os.Getenv("INCIDENTFLOW_PLATFORM_URL"), "/"),
-		GatewayURL:         os.Getenv("INCIDENTFLOW_GATEWAY_URL"),
-		RegistrationToken:  os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN"),
-		AgentToken:         os.Getenv("INCIDENTFLOW_AGENT_TOKEN"),
-		ClusterName:        getenv("INCIDENTFLOW_CLUSTER_NAME", "unknown-cluster"),
-		LogLevel:           getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
-		TokenFile:          getenv("INCIDENTFLOW_AGENT_TOKEN_FILE", DefaultTokenFile),
-		NamespaceAllowlist: splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
-		CommandTimeout:     getenvDuration("INCIDENTFLOW_COMMAND_TIMEOUT", DefaultCommandTimeout),
-		HeartbeatPeriod:    getenvDuration("INCIDENTFLOW_HEARTBEAT_PERIOD", DefaultHeartbeatPeriod),
-		MaxTailLines:       getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),
-		DefaultTailLines:   getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
-		MaxLogBytes:        getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
-		MetricsAddr:        getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
+		PlatformURL:           strings.TrimRight(os.Getenv("INCIDENTFLOW_PLATFORM_URL"), "/"),
+		GatewayURL:            os.Getenv("INCIDENTFLOW_GATEWAY_URL"),
+		RegistrationToken:     os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN"),
+		AgentToken:            os.Getenv("INCIDENTFLOW_AGENT_TOKEN"),
+		ClusterName:           getenv("INCIDENTFLOW_CLUSTER_NAME", "unknown-cluster"),
+		LogLevel:              getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
+		TokenFile:             getenv("INCIDENTFLOW_AGENT_TOKEN_FILE", DefaultTokenFile),
+		CredentialsSecretName: getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
+		Namespace:             getenv("K8S_NAMESPACE_NAME", "default"),
+		NamespaceAllowlist:    splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
+		CommandTimeout:        getenvDuration("INCIDENTFLOW_COMMAND_TIMEOUT", DefaultCommandTimeout),
+		HeartbeatPeriod:       getenvDuration("INCIDENTFLOW_HEARTBEAT_PERIOD", DefaultHeartbeatPeriod),
+		MaxTailLines:          getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),
+		DefaultTailLines:      getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
+		MaxLogBytes:           getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
+		MetricsAddr:           getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -67,9 +72,8 @@ func (c Config) Validate() error {
 	if c.GatewayURL == "" {
 		missing = append(missing, "INCIDENTFLOW_GATEWAY_URL")
 	}
-	if c.AgentToken == "" && c.RegistrationToken == "" {
-		missing = append(missing, "INCIDENTFLOW_AGENT_TOKEN or INCIDENTFLOW_REGISTRATION_TOKEN")
-	}
+	// Credentials are normally loaded from the Kubernetes Secret at runtime, so
+	// neither token environment variable is required on a restarted pod.
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required configuration: %s", strings.Join(missing, ", "))
 	}
