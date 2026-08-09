@@ -57,20 +57,9 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          volumeMounts:
-            - name: token-store
-              mountPath: /var/lib/incidentflow
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       tolerations:
         {{- toYaml .Values.tolerations | nindent 8 }}
       affinity:
         {{- toYaml .Values.affinity | nindent 8 }}
-      volumes:
-        - name: token-store
-          {{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "incidentflow-k8s-agent.pvcName" . }}
-          {{- else }}
-          emptyDir: {}
-          {{- end }}

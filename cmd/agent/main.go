@@ -46,6 +46,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(fs.Output(), "\nRuntime options:\n")
 		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_CLUSTER_NAME         Cluster label (default: unknown-cluster).\n")
 		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_LOG_LEVEL            debug, info, warn, or error (default: info).\n")
+		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_LOG_FORMAT           json or console (default: json).\n")
 		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_NAMESPACE_ALLOWLIST  Comma-separated allowed namespaces.\n")
 		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_DEFAULT_TAIL_LINES   Default pod log lines (default: 200).\n")
 		fmt.Fprintf(fs.Output(), "  INCIDENTFLOW_MAX_TAIL_LINES       Maximum pod log lines (default: 1000).\n")
@@ -70,18 +71,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "configuration error: %v\n\nRun with --help to see required environment variables.\n", err)
 		return 1
 	}
-	logger, err := telemetry.NewLogger(cfg.LogLevel)
+	logger, err := telemetry.NewLogger(cfg.LogLevel, cfg.LogFormat)
 	if err != nil {
 		fmt.Fprintf(stderr, "logger error: %v\n", err)
 		return 1
 	}
 	defer logger.Sync()
+	logger = logger.With(
+		zap.String("service.name", "incidentflow-k8s-agent"),
+		zap.String("service.version", version.Version),
+		zap.String("cluster.name", cfg.ClusterName),
+		zap.String("k8s.namespace.name", cfg.Namespace),
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	tracingCfg := observability.ConfigFromEnv()
-	shutdownTracing, err := observability.Init(ctx, tracingCfg, logger)
+	shutdownTracing, err := observability.Init(
+		ctx,
+		tracingCfg,
+		logger.With(zap.String("component", "observability")),
+	)
 	if err != nil {
 		logger.Warn("otel tracing init failed, continuing without tracing", zap.Error(err))
 		shutdownTracing = func(context.Context) {}

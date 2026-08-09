@@ -10,7 +10,7 @@ IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-incidentflow-k8s-agent}"
 IMAGE_TAG="${IMAGE_TAG:-dev}"
 PLATFORM_URL="${INCIDENTFLOW_PLATFORM_URL:-https://api.example.com}"
 GATEWAY_URL="${INCIDENTFLOW_GATEWAY_URL:-wss://gateway.example.com/agents/ws}"
-AGENT_TOKEN="${INCIDENTFLOW_AGENT_TOKEN:-kind-smoke-test-token}"
+REGISTRATION_TOKEN="${INCIDENTFLOW_REGISTRATION_TOKEN:-kind-smoke-test-token}"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-${ROOT_DIR}/deploy/kind/cluster.yaml}"
 
 log() {
@@ -58,9 +58,9 @@ helm template "${RELEASE_NAME}" ./deploy/helm \
   --set image.tag="${IMAGE_TAG}" \
   --set image.pullPolicy=Never \
   --set clusterName="${CLUSTER_NAME}" \
-  --set platformUrl="${PLATFORM_URL}" \
-  --set gatewayUrl="${GATEWAY_URL}" \
-  --set agentToken="${AGENT_TOKEN}" >/tmp/incidentflow-k8s-agent-rendered.yaml
+  --set agent.platformUrl="${PLATFORM_URL}" \
+  --set agent.gatewayUrl="${GATEWAY_URL}" \
+  --set registrationToken="${REGISTRATION_TOKEN}" >/tmp/incidentflow-k8s-agent-rendered.yaml
 
 log "Installing Helm release"
 helm upgrade --install "${RELEASE_NAME}" ./deploy/helm \
@@ -70,9 +70,9 @@ helm upgrade --install "${RELEASE_NAME}" ./deploy/helm \
   --set image.tag="${IMAGE_TAG}" \
   --set image.pullPolicy=Never \
   --set clusterName="${CLUSTER_NAME}" \
-  --set platformUrl="${PLATFORM_URL}" \
-  --set gatewayUrl="${GATEWAY_URL}" \
-  --set agentToken="${AGENT_TOKEN}"
+  --set agent.platformUrl="${PLATFORM_URL}" \
+  --set agent.gatewayUrl="${GATEWAY_URL}" \
+  --set registrationToken="${REGISTRATION_TOKEN}"
 
 log "Waiting for Deployment availability"
 if ! kubectl -n "${NAMESPACE}" rollout status "deployment/${RELEASE_NAME}-${RELEASE_NAME}" --timeout=90s; then
@@ -107,7 +107,8 @@ check_can_i() {
 
 check_can_i yes list pods
 check_can_i yes get pods/log
-check_can_i no get secrets
+check_can_i yes get secret/incidentflow-agent-credentials
+check_can_i no list secrets
 check_can_i no delete pods
 
 log "Smoke test complete"

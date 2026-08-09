@@ -28,7 +28,7 @@ The agent never exposes a public endpoint and never requires inbound traffic. Al
 ```sh
 helm install incidentflow-k8s-agent \
   oci://ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent \
-  --version 1.0.6 \
+  --version 1.0.10 \
   --namespace incidentflow-agent \
   --create-namespace \
   --set clusterName=prod-us-east \
@@ -57,6 +57,7 @@ Key environment variables injected by the Helm chart:
 | `INCIDENTFLOW_CREDENTIALS_SECRET_NAME` | yes | Kubernetes Secret containing permanent `agent_id` and `agent_token` |
 | `INCIDENTFLOW_CLUSTER_NAME` | yes | Cluster identifier shown in the dashboard |
 | `INCIDENTFLOW_LOG_LEVEL` | no | Log level — `debug`, `info`, `warn`, `error`. Defaults to `info` |
+| `INCIDENTFLOW_LOG_FORMAT` | no | `json` (default) for Kubernetes log collectors; `console` only for local development |
 | `INCIDENTFLOW_NAMESPACE_ALLOWLIST` | no | Comma-separated namespace allowlist. Empty means all non-system namespaces |
 
 ## Token lifecycle
@@ -102,7 +103,6 @@ helm upgrade --install incidentflow-k8s-agent ... --set registrationToken=<new-o
 | ClusterRoleBinding | `incidentflow-k8s-agent` |
 | ConfigMap | `incidentflow-k8s-agent-config` |
 | Secret | `incidentflow-agent-credentials` |
-| PVC _(optional)_ | `incidentflow-k8s-agent-token-store` |
 
 No Service object is created — the agent is outbound-only.
 

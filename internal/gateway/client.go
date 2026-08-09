@@ -57,12 +57,16 @@ func NewClient(opts Options) *Client {
 	if maxConcurrentCommands <= 0 {
 		maxConcurrentCommands = defaultMaxConcurrentCommands
 	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &Client{
 		gatewayURL:            opts.GatewayURL,
 		identity:              opts.Identity,
 		clusterName:           opts.ClusterName,
 		version:               opts.Version,
-		logger:                opts.Logger,
+		logger:                logger.With(zap.String("component", "gateway")),
 		handler:               opts.Handler,
 		commandTimeout:        opts.CommandTimeout,
 		heartbeatPeriod:       opts.HeartbeatPeriod,
@@ -80,7 +84,7 @@ func (c *Client) Run(ctx context.Context) error {
 		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version, c.heartbeatPeriod)
 		if err != nil {
 			delay := backoff.Next()
-			c.logger.Warn("gateway connection failed", zap.Error(err), zap.Duration("retry_in", delay))
+			c.logger.Warn("gateway connection failed", zap.Error(err), zap.Int64("retry_in_ms", delay.Milliseconds()))
 			if !sleepContext(ctx, delay) {
 				return ctx.Err()
 			}
@@ -167,7 +171,7 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 			c.logger.Warn("discarding invalid gateway message", zap.Error(err))
 			continue
 		}
-		c.logger.Info("received command from gateway",
+		c.logger.Debug("received command from gateway",
 			zap.String("command_id", cmd.ID),
 			zap.String("action", cmd.Action),
 		)
@@ -243,11 +247,11 @@ func (c *Client) handleCommand(ctx context.Context, conn *websocket.Conn, cmd ap
 		c.logger.Warn("write command response failed", zap.String("command_id", cmd.ID), zap.Error(err))
 		return
 	}
-	c.logger.Info("sent command response to gateway",
+	c.logger.Info("command completed",
 		zap.String("command_id", cmd.ID),
 		zap.String("action", cmd.Action),
 		zap.String("status", resp.Status),
-		zap.Duration("duration", time.Since(started)),
+		zap.Int64("duration_ms", time.Since(started).Milliseconds()),
 	)
 }
 

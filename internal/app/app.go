@@ -24,7 +24,7 @@ type App struct {
 }
 
 func New(cfg config.Config, logger *zap.Logger) *App {
-	return &App{cfg: cfg, logger: logger}
+	return &App{cfg: cfg, logger: logger.With(zap.String("component", "app"))}
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -85,11 +85,6 @@ func (a *App) identity(ctx context.Context) (auth.Identity, error) {
 	}
 	if identity.Valid() {
 		return identity, nil
-	}
-	// Compatibility with pre-Secret installations. New chart releases never set
-	// this value; permanent credentials are always read from the Secret first.
-	if a.cfg.AgentToken != "" {
-		return auth.Identity{Token: a.cfg.AgentToken}, nil
 	}
 	registrar := auth.NewRegistrar(a.cfg.PlatformURL, a.cfg.RegistrationToken)
 	identity, registered, err := auth.Bootstrap(ctx, store, registrar, a.cfg.RegistrationToken, a.cfg.ClusterName, version.Version)

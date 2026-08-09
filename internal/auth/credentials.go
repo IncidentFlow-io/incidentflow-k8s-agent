@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	AgentIDKey    = "agent_id"
-	AgentTokenKey = "agent_token"
+	AgentIDKey                 = "agent_id"
+	AgentTokenKey              = "agent_token"
+	legacyAgentTokenKey        = "agent-token"
+	legacyRegistrationTokenKey = "registration-token"
 )
 
 // CredentialStore keeps the long-lived agent identity inside the cluster. It
@@ -79,6 +81,11 @@ func (s *KubernetesCredentialStore) Save(ctx context.Context, identity Identity)
 	}
 	secret.Data[AgentIDKey] = []byte(identity.AgentID)
 	secret.Data[AgentTokenKey] = []byte(identity.Token)
+	// Remove credentials from the pre-bootstrap implementation. Registration
+	// tokens belong only in the separate bootstrap Secret and must never be
+	// retained with long-lived credentials.
+	delete(secret.Data, legacyAgentTokenKey)
+	delete(secret.Data, legacyRegistrationTokenKey)
 	if _, err := secrets.Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("update credentials secret: %w", err)
 	}

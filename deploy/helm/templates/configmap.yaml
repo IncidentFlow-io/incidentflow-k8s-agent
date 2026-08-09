@@ -9,6 +9,7 @@ data:
   INCIDENTFLOW_GATEWAY_URL: {{ .Values.agent.gatewayUrl | default "wss://gateway.incidentflow.io/agents/ws" | quote }}
   INCIDENTFLOW_CLUSTER_NAME: {{ include "incidentflow-k8s-agent.clusterName" . | quote }}
   INCIDENTFLOW_LOG_LEVEL: {{ .Values.logLevel | quote }}
+  INCIDENTFLOW_LOG_FORMAT: {{ .Values.logFormat | quote }}
   INCIDENTFLOW_NAMESPACE_ALLOWLIST: {{ join "," .Values.namespaceAllowlist | quote }}
   INCIDENTFLOW_NAMESPACE_DENYLIST: {{ join "," .Values.namespaceDenylist | quote }}
   INCIDENTFLOW_DEFAULT_TAIL_LINES: {{ .Values.limits.defaultTailLines | quote }}
