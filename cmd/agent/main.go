@@ -62,7 +62,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *showVersion {
-		fmt.Fprintf(stdout, "IncidentFlow Kubernetes Agent\nVersion: %s\nCommit:  %s\n", version.Version, version.Commit)
+		fmt.Fprintf(stdout, "IncidentFlow Kubernetes Agent\nVersion: %s\nCommit:  %s\n", version.Runtime(), version.Commit)
 		return 0
 	}
 
@@ -79,7 +79,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	defer logger.Sync()
 	logger = logger.With(
 		zap.String("service.name", "incidentflow-k8s-agent"),
-		zap.String("service.version", version.Version),
+		zap.String("service.version", version.Runtime()),
 		zap.String("cluster.name", cfg.ClusterName),
 		zap.String("k8s.namespace.name", cfg.Namespace),
 	)
