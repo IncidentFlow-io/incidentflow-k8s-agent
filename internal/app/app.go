@@ -28,7 +28,8 @@ func New(cfg config.Config, logger *zap.Logger) *App {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	identity, err := a.identity(ctx)
+	runtimeVersion := version.Runtime()
+	identity, err := a.identity(ctx, runtimeVersion)
 	if err != nil {
 		return err
 	}
@@ -65,7 +66,7 @@ func (a *App) Run(ctx context.Context) error {
 		GatewayURL:      gatewayURL,
 		Identity:        identity,
 		ClusterName:     a.cfg.ClusterName,
-		Version:         version.Version,
+		Version:         runtimeVersion,
 		Logger:          a.logger,
 		Handler:         router,
 		CommandTimeout:  a.cfg.CommandTimeout,
@@ -74,7 +75,7 @@ func (a *App) Run(ctx context.Context) error {
 	return client.Run(ctx)
 }
 
-func (a *App) identity(ctx context.Context) (auth.Identity, error) {
+func (a *App) identity(ctx context.Context, runtimeVersion string) (auth.Identity, error) {
 	store, err := auth.NewInClusterCredentialStore(a.cfg.Namespace, a.cfg.CredentialsSecretName)
 	if err != nil {
 		return auth.Identity{}, fmt.Errorf("create credentials store: %w", err)
@@ -87,7 +88,7 @@ func (a *App) identity(ctx context.Context) (auth.Identity, error) {
 		return identity, nil
 	}
 	registrar := auth.NewRegistrar(a.cfg.PlatformURL, a.cfg.RegistrationToken)
-	identity, registered, err := auth.Bootstrap(ctx, store, registrar, a.cfg.RegistrationToken, a.cfg.ClusterName, version.Version)
+	identity, registered, err := auth.Bootstrap(ctx, store, registrar, a.cfg.RegistrationToken, a.cfg.ClusterName, runtimeVersion)
 	if err != nil {
 		return auth.Identity{}, fmt.Errorf("register agent: %w", err)
 	}
