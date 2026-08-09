@@ -86,6 +86,11 @@
       "title": "global",
       "type": "object"
     },
+    "fullnameOverride": {
+      "default": "",
+      "description": "Overrides the generated resource name. Use a unique value per environment when releases share a cluster.",
+      "type": "string"
+    },
     "image": {
       "additionalProperties": false,
       "properties": {

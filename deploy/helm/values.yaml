@@ -14,6 +14,10 @@ image:
 imagePullSecrets: []
 # - name: my-registry-secret
 
+# -- Overrides the generated resource name. Set a unique value for every
+# environment when more than one release shares a Kubernetes cluster.
+fullnameOverride: ""
+
 # -- Cluster name shown in the IncidentFlow dashboard. Required for first registration.
 clusterName: ""
 # -- One-time, short-lived bootstrap token. This is the only token an installer supplies.
