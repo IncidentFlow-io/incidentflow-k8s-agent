@@ -38,6 +38,9 @@ agent:
 # One of: debug, info, warn, error.
 logLevel: info
 
+# -- Agent log format. Use JSON in Kubernetes; console is useful only for local development.
+logFormat: json
+
 # -- Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.
 # @default -- `[]` (all non-system namespaces are accessible)
 namespaceAllowlist: []
@@ -63,18 +66,6 @@ limits:
   commandTimeout: 30s
   # -- How often the agent sends a heartbeat to the platform.
   heartbeatPeriod: 30s
-
-persistence:
-  # -- Enable a PersistentVolumeClaim for the agent token store.
-  # When disabled the token store uses an emptyDir (tokens are lost on pod restart).
-  enabled: false
-  # -- Storage size for the token store PVC.
-  size: 1Gi
-  # -- StorageClass name. Leave empty to use the cluster default.
-  storageClassName: ""
-  # -- Access modes for the PVC.
-  accessModes:
-    - ReadWriteOnce
 
 # -- Pod-level security context.
 # @default -- See values.yaml

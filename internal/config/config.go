@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	DefaultTokenFile             = "/var/lib/incidentflow/agent-token"
 	DefaultCredentialsSecretName = "incidentflow-agent-credentials"
+	DefaultLogFormat             = "json"
 	DefaultCommandTimeout        = 30 * time.Second
 	DefaultHeartbeatPeriod       = 30 * time.Second
 	DefaultMaxTailLines          = int64(1000)
@@ -24,10 +24,9 @@ type Config struct {
 	PlatformURL           string
 	GatewayURL            string
 	RegistrationToken     string
-	AgentToken            string
 	ClusterName           string
 	LogLevel              string
-	TokenFile             string
+	LogFormat             string
 	CredentialsSecretName string
 	Namespace             string
 	NamespaceAllowlist    []string
@@ -45,10 +44,9 @@ func Load() (Config, error) {
 		PlatformURL:           strings.TrimRight(os.Getenv("INCIDENTFLOW_PLATFORM_URL"), "/"),
 		GatewayURL:            os.Getenv("INCIDENTFLOW_GATEWAY_URL"),
 		RegistrationToken:     os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN"),
-		AgentToken:            os.Getenv("INCIDENTFLOW_AGENT_TOKEN"),
 		ClusterName:           getenv("INCIDENTFLOW_CLUSTER_NAME", "unknown-cluster"),
 		LogLevel:              getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
-		TokenFile:             getenv("INCIDENTFLOW_AGENT_TOKEN_FILE", DefaultTokenFile),
+		LogFormat:             getenv("INCIDENTFLOW_LOG_FORMAT", DefaultLogFormat),
 		CredentialsSecretName: getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
 		Namespace:             getenv("K8S_NAMESPACE_NAME", "default"),
 		NamespaceAllowlist:    splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),

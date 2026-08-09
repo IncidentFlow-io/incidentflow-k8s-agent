@@ -28,16 +28,13 @@ Outbound-only Kubernetes agent for IncidentFlow
 | limits.heartbeatPeriod | string | `"30s"` | How often the agent sends a heartbeat to the platform. |
 | limits.maxLogBytes | int | `524288` | Hard maximum log body size in bytes returned per request. |
 | limits.maxTailLines | int | `1000` | Hard maximum number of log lines the agent will return per request. |
+| logFormat | string | `"json"` | Agent log format. Use JSON in Kubernetes; console is useful only for local development. |
 | logLevel | string | `"info"` | Log level for the agent process. One of: debug, info, warn, error. |
 | namespaceAllowlist | list | `[]` (all non-system namespaces are accessible) | Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces. |
 | nodeSelector | object | `{}` (schedule on any node) | Node selector applied to the agent pod. |
 | observability.environment | string | `"production"` | Deployment environment label included in trace metadata (e.g. production, staging). |
 | observability.tracing.enabled | bool | `false` | Enable OpenTelemetry tracing. When false, no OTEL environment variables are injected. |
 | observability.tracing.otlpEndpoint | string | `""` | OTLP gRPC endpoint for the OpenTelemetry collector. |
-| persistence.accessModes | list | `["ReadWriteOnce"]` | Access modes for the PVC. |
-| persistence.enabled | bool | `false` | Enable a PersistentVolumeClaim for the agent token store. When disabled the token store uses an emptyDir (tokens are lost on pod restart). |
-| persistence.size | string | `"1Gi"` | Storage size for the token store PVC. |
-| persistence.storageClassName | string | `""` | StorageClass name. Leave empty to use the cluster default. |
 | podSecurityContext | object | See values.yaml | Pod-level security context. |
 | replicaCount | int | `1` | Number of agent replicas. Should always be 1 — the agent holds a persistent WebSocket connection. |
 | resources | object | See values.yaml | CPU and memory resource requests and limits. |
