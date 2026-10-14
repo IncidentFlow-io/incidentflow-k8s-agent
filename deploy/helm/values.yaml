@@ -20,9 +20,7 @@ fullnameOverride: ""
 
 # -- Cluster name shown in the IncidentFlow dashboard. Required for first registration.
 clusterName: ""
-# -- One-time, short-lived bootstrap token. This is the only token an installer supplies.
-registrationToken: ""
-# -- Existing Secret holding `registration-token`; takes precedence over registrationToken.
+# -- Existing Secret holding the one-time `registration-token`. Its value is never stored in the Helm release.
 registrationTokenSecretName: ""
 # -- Secret where permanent `agent_id` and `agent_token` are stored after bootstrap.
 credentialsSecretName: ""
@@ -34,7 +32,6 @@ agent:
   platformUrl: ""
   # -- IncidentFlow agent gateway WebSocket URL. Defaults to the hosted gateway when empty.
   gatewayUrl: ""
-  registrationToken: ""
   registrationTokenSecretName: ""
   credentialsSecretName: incidentflow-agent-credentials
 
