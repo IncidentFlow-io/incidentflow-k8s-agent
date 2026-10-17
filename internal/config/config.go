@@ -28,6 +28,7 @@ type Config struct {
 	LogLevel              string
 	LogFormat             string
 	CredentialsSecretName string
+	RegistrationTokenSecretName string
 	Namespace             string
 	NamespaceAllowlist    []string
 	NamespaceDenylist     []string
@@ -48,6 +49,7 @@ func Load() (Config, error) {
 		LogLevel:              getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
 		LogFormat:             getenv("INCIDENTFLOW_LOG_FORMAT", DefaultLogFormat),
 		CredentialsSecretName: getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
+		RegistrationTokenSecretName: os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN_SECRET_NAME"),
 		Namespace:             getenv("K8S_NAMESPACE_NAME", "default"),
 		NamespaceAllowlist:    splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
 		NamespaceDenylist:     splitCSV(getenv("INCIDENTFLOW_NAMESPACE_DENYLIST", "kube-system,kube-public,kube-node-lease")),

@@ -1,6 +1,6 @@
 # incidentflow-k8s-agent
 
-![Version: 1.0.6](https://img.shields.io/badge/Version-1.0.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.0.6](https://img.shields.io/badge/AppVersion-1.0.6-informational?style=flat-square)
+![Version: 1.0.13](https://img.shields.io/badge/Version-1.0.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.0.10](https://img.shields.io/badge/AppVersion-v1.0.10-informational?style=flat-square)
 
 Outbound-only Kubernetes agent for IncidentFlow
 
@@ -10,14 +10,12 @@ Outbound-only Kubernetes agent for IncidentFlow
 |-----|------|---------|-------------|
 | affinity | object | `{}` (no affinity rules) | Affinity rules applied to the agent pod. |
 | clusterName | string | `""` | Cluster name shown in the IncidentFlow dashboard. Required for first registration. |
-| registrationToken | string | `""` | One-time bootstrap token. This is the only token an installer supplies. |
-| registrationTokenSecretName | string | `""` | Existing Secret holding `registration-token`; takes precedence over `registrationToken`. |
+| registrationTokenSecretName | string | `""` | Existing Secret holding `registration-token`. The token is never stored in Helm values or release history. |
 | credentialsSecretName | string | `"incidentflow-agent-credentials"` | Secret where permanent `agent_id` and `agent_token` are stored after bootstrap. |
 | agent.clusterName | string | `""` | Deprecated compatibility alias for `clusterName`. |
 | agent.gatewayUrl | string | `""` | IncidentFlow agent gateway WebSocket URL. Defaults to the hosted gateway when empty. |
 | agent.platformUrl | string | `""` | IncidentFlow platform API URL. Defaults to the hosted platform when empty. |
 | agent.credentialsSecretName | string | `"incidentflow-agent-credentials"` | Deprecated compatibility alias for `credentialsSecretName`. |
-| agent.registrationToken | string | `""` | Deprecated compatibility alias for `registrationToken`. |
 | agent.registrationTokenSecretName | string | `""` | Deprecated compatibility alias for `registrationTokenSecretName`. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
 | image.repository | string | `"ghcr.io/incidentflow-io/incidentflow-k8s-agent"` | Docker image repository. |
