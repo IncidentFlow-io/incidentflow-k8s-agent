@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,23 @@ type Registrar struct {
 	platformURL       string
 	registrationToken string
 	httpClient        *http.Client
+}
+
+type RegistrationHTTPError struct {
+	StatusCode int
+}
+
+func (e *RegistrationHTTPError) Error() string {
+	return fmt.Sprintf("registration failed with HTTP %d", e.StatusCode)
+}
+
+// A rejected one-time token cannot succeed again. Transient platform errors
+// remain retryable without waiting for the Secret to change.
+func IsPermanentRegistrationError(err error) bool {
+	var statusErr *RegistrationHTTPError
+	return errors.As(err, &statusErr) &&
+		statusErr.StatusCode >= 400 && statusErr.StatusCode < 500 &&
+		statusErr.StatusCode != http.StatusTooManyRequests
 }
 
 type registrationRequest struct {
@@ -60,7 +78,7 @@ func (r Registrar) Register(ctx context.Context, clusterName, version string) (I
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Identity{}, fmt.Errorf("registration failed with status %s", resp.Status)
+		return Identity{}, &RegistrationHTTPError{StatusCode: resp.StatusCode}
 	}
 	var decoded registrationResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&decoded); err != nil {

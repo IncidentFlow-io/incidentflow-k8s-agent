@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -18,7 +19,14 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultMaxConcurrentCommands = 8
+const (
+	defaultMaxConcurrentCommands = 8
+	stableConnectionDuration     = 30 * time.Second
+)
+
+// ErrAccessRevoked tells the app to obtain fresh registration credentials.
+// Retrying the same gateway token cannot recover a revoked agent.
+var ErrAccessRevoked = errors.New("agent gateway access revoked")
 
 type Handler interface {
 	Handle(ctx context.Context, cmd apiv1.Command) apiv1.Response
@@ -83,6 +91,9 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		conn, err := dialWebSocket(ctx, c.dialer, c.gatewayURL, c.identity, c.clusterName, c.version, c.heartbeatPeriod)
 		if err != nil {
+			if errors.Is(err, ErrAccessRevoked) {
+				return err
+			}
 			delay := backoff.Next()
 			c.logger.Warn("gateway connection failed", zap.Error(err), zap.Int64("retry_in_ms", delay.Milliseconds()))
 			if !sleepContext(ctx, delay) {
@@ -92,14 +103,25 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		c.logger.Info("connected to IncidentFlow Agent Gateway")
 		telemetry.GatewayConnected.Set(1)
-		backoff.Reset()
+		connectedAt := time.Now()
 		err = c.serveConnection(ctx, conn)
 		telemetry.GatewayConnected.Set(0)
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
+		var closeErr *websocket.CloseError
+		if errors.As(err, &closeErr) && closeErr.Code == websocket.ClosePolicyViolation {
+			return fmt.Errorf("%w: %v", ErrAccessRevoked, err)
+		}
+		if time.Since(connectedAt) >= stableConnectionDuration {
+			backoff.Reset()
+		}
 		telemetry.GatewayReconnects.Inc()
-		c.logger.Warn("gateway connection closed; reconnecting", zap.Error(err))
+		delay := backoff.Next()
+		c.logger.Warn("gateway connection closed; reconnecting", zap.Error(err), zap.Int64("retry_in_ms", delay.Milliseconds()))
+		if !sleepContext(ctx, delay) {
+			return ctx.Err()
+		}
 	}
 }
 
@@ -130,6 +152,13 @@ func (c *Client) serveConnection(ctx context.Context, conn *websocket.Conn) erro
 		result = err
 	}
 	connCancel()
+	// Tell the gateway this session is going away before closing the TCP socket.
+	// WriteControl is safe alongside a concurrent data writer.
+	_ = conn.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseGoingAway, "Agent stopping"),
+		time.Now().Add(time.Second),
+	)
 	_ = conn.Close()
 	loopWG.Wait()
 	commandWG.Wait()

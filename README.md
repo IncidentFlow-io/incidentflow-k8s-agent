@@ -53,7 +53,7 @@ Key environment variables injected by the Helm chart:
 |---|---|---|
 | `INCIDENTFLOW_PLATFORM_URL` | yes | Platform API base URL |
 | `INCIDENTFLOW_GATEWAY_URL` | yes | WebSocket gateway URL |
-| `INCIDENTFLOW_REGISTRATION_TOKEN` | only when no credentials exist | One-time registration token |
+| `INCIDENTFLOW_REGISTRATION_TOKEN_SECRET_NAME` | yes in Helm | Name of the separately managed bootstrap Secret containing `registration-token` |
 | `INCIDENTFLOW_CREDENTIALS_SECRET_NAME` | yes | Kubernetes Secret containing permanent `agent_id` and `agent_token` |
 | `INCIDENTFLOW_CLUSTER_NAME` | yes | Cluster identifier shown in the dashboard |
 | `INCIDENTFLOW_LOG_LEVEL` | no | Log level — `debug`, `info`, `warn`, `error`. Defaults to `info` |
@@ -64,10 +64,12 @@ Key environment variables injected by the Helm chart:
 
 On first start the agent exchanges the one-time registration token for a permanent agent ID and agent token. It stores these only in the namespaced Kubernetes Secret `incidentflow-agent-credentials`. On restart it reads that Secret first, so no registration token or PVC is required.
 
-The Helm chart pre-creates the empty credentials Secret and grants the agent only `get`, `update`, and `patch` access to that exact Secret. It does not grant Secret list access or write access to any other Secret. If the namespace or credentials Secret is deleted, install again with a newly issued registration token.
+The Helm chart pre-creates the empty credentials Secret and grants the agent only `get`, `update`, and `patch` access to that exact Secret. It grants `get` on the separately managed bootstrap Secret so a running agent can read a replacement token after access is revoked. The agent cannot create Secrets or other Kubernetes resources. The credentials Secret manifest omits `data`, so normal Helm upgrades, rollbacks, and patch-based GitOps reconciliation preserve the agent-written credentials. A GitOps controller configured to replace or force-recreate the Secret can still erase them; do not enable that behavior for this resource. If the namespace or credentials Secret is deleted, install again with a newly issued registration token.
 
 ```sh
-helm upgrade --install incidentflow-k8s-agent ... --set registrationToken=<new-one-time-token>
+kubectl --context <your-context> create namespace incidentflow-agent --dry-run=client -o yaml | kubectl --context <your-context> apply -f -
+kubectl --context <your-context> -n incidentflow-agent create secret generic incidentflow-k8s-agent-bootstrap --from-literal=registration-token='<one-time-token>' --dry-run=client -o yaml | kubectl --context <your-context> apply -f -
+helm upgrade --install incidentflow-k8s-agent ./deploy/helm --kube-context <your-context> --namespace incidentflow-agent --set registrationTokenSecretName=incidentflow-k8s-agent-bootstrap
 ```
 
 ## Supported commands

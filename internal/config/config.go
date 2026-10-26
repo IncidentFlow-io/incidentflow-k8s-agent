@@ -21,42 +21,44 @@ const (
 )
 
 type Config struct {
-	PlatformURL           string
-	GatewayURL            string
-	RegistrationToken     string
-	ClusterName           string
-	LogLevel              string
-	LogFormat             string
-	CredentialsSecretName string
-	Namespace             string
-	NamespaceAllowlist    []string
-	NamespaceDenylist     []string
-	CommandTimeout        time.Duration
-	HeartbeatPeriod       time.Duration
-	MaxTailLines          int64
-	DefaultTailLines      int64
-	MaxLogBytes           int64
-	MetricsAddr           string
+	PlatformURL                 string
+	GatewayURL                  string
+	RegistrationToken           string
+	ClusterName                 string
+	LogLevel                    string
+	LogFormat                   string
+	CredentialsSecretName       string
+	RegistrationTokenSecretName string
+	Namespace                   string
+	NamespaceAllowlist          []string
+	NamespaceDenylist           []string
+	CommandTimeout              time.Duration
+	HeartbeatPeriod             time.Duration
+	MaxTailLines                int64
+	DefaultTailLines            int64
+	MaxLogBytes                 int64
+	MetricsAddr                 string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		PlatformURL:           strings.TrimRight(os.Getenv("INCIDENTFLOW_PLATFORM_URL"), "/"),
-		GatewayURL:            os.Getenv("INCIDENTFLOW_GATEWAY_URL"),
-		RegistrationToken:     os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN"),
-		ClusterName:           getenv("INCIDENTFLOW_CLUSTER_NAME", "unknown-cluster"),
-		LogLevel:              getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
-		LogFormat:             getenv("INCIDENTFLOW_LOG_FORMAT", DefaultLogFormat),
-		CredentialsSecretName: getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
-		Namespace:             getenv("K8S_NAMESPACE_NAME", "default"),
-		NamespaceAllowlist:    splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
-		NamespaceDenylist:     splitCSV(getenv("INCIDENTFLOW_NAMESPACE_DENYLIST", "kube-system,kube-public,kube-node-lease")),
-		CommandTimeout:        getenvDuration("INCIDENTFLOW_COMMAND_TIMEOUT", DefaultCommandTimeout),
-		HeartbeatPeriod:       getenvDuration("INCIDENTFLOW_HEARTBEAT_PERIOD", DefaultHeartbeatPeriod),
-		MaxTailLines:          getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),
-		DefaultTailLines:      getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
-		MaxLogBytes:           getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
-		MetricsAddr:           getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
+		PlatformURL:                 strings.TrimRight(os.Getenv("INCIDENTFLOW_PLATFORM_URL"), "/"),
+		GatewayURL:                  os.Getenv("INCIDENTFLOW_GATEWAY_URL"),
+		RegistrationToken:           os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN"),
+		ClusterName:                 getenv("INCIDENTFLOW_CLUSTER_NAME", "unknown-cluster"),
+		LogLevel:                    getenv("INCIDENTFLOW_LOG_LEVEL", "info"),
+		LogFormat:                   getenv("INCIDENTFLOW_LOG_FORMAT", DefaultLogFormat),
+		CredentialsSecretName:       getenv("INCIDENTFLOW_CREDENTIALS_SECRET_NAME", DefaultCredentialsSecretName),
+		RegistrationTokenSecretName: os.Getenv("INCIDENTFLOW_REGISTRATION_TOKEN_SECRET_NAME"),
+		Namespace:                   getenv("K8S_NAMESPACE_NAME", "default"),
+		NamespaceAllowlist:          splitCSV(os.Getenv("INCIDENTFLOW_NAMESPACE_ALLOWLIST")),
+		NamespaceDenylist:           splitCSV(getenv("INCIDENTFLOW_NAMESPACE_DENYLIST", "kube-system,kube-public,kube-node-lease")),
+		CommandTimeout:              getenvDuration("INCIDENTFLOW_COMMAND_TIMEOUT", DefaultCommandTimeout),
+		HeartbeatPeriod:             getenvDuration("INCIDENTFLOW_HEARTBEAT_PERIOD", DefaultHeartbeatPeriod),
+		MaxTailLines:                getenvInt64("INCIDENTFLOW_MAX_TAIL_LINES", DefaultMaxTailLines),
+		DefaultTailLines:            getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
+		MaxLogBytes:                 getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
+		MetricsAddr:                 getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
