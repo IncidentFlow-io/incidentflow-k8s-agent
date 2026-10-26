@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,8 +34,14 @@ func dialWebSocket(ctx context.Context, dialer Dialer, gatewayURL string, identi
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+identity.Token)
 	headers.Set("User-Agent", "incidentflow-k8s-agent/"+version)
-	conn, _, err := dialer.DialContext(ctx, parsed.String(), headers)
+	conn, response, err := dialer.DialContext(ctx, parsed.String(), headers)
 	if err != nil {
+		if response != nil {
+			if response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusUnauthorized {
+				return nil, fmt.Errorf("%w: gateway websocket handshake returned HTTP %d", ErrAccessRevoked, response.StatusCode)
+			}
+			return nil, fmt.Errorf("gateway websocket handshake returned HTTP %d: %w", response.StatusCode, err)
+		}
 		return nil, err
 	}
 	// pongWait must be larger than heartbeatPeriod so the connection isn't

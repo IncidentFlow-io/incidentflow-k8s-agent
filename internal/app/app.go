@@ -29,7 +29,18 @@ func New(cfg config.Config, logger *zap.Logger) *App {
 
 func (a *App) Run(ctx context.Context) error {
 	runtimeVersion := version.Runtime()
-	identity, err := a.identity(ctx, runtimeVersion)
+	store, err := auth.NewInClusterCredentialStore(a.cfg.Namespace, a.cfg.CredentialsSecretName)
+	if err != nil {
+		return fmt.Errorf("create credentials store: %w", err)
+	}
+	var tokenSource auth.RegistrationTokenSource
+	if a.cfg.RegistrationTokenSecretName != "" {
+		tokenSource, err = auth.NewInClusterRegistrationTokenSource(a.cfg.Namespace, a.cfg.RegistrationTokenSecretName)
+		if err != nil {
+			return fmt.Errorf("create registration token source: %w", err)
+		}
+	}
+	identity, err := a.identity(ctx, store, tokenSource, runtimeVersion)
 	if err != nil {
 		return err
 	}
@@ -58,28 +69,31 @@ func (a *App) Run(ctx context.Context) error {
 		MaxLogBytes:      a.cfg.MaxLogBytes,
 	}
 	router := commands.NewRouter(kubeService, guard, limits)
-	gatewayURL := identity.GatewayURL
-	if gatewayURL == "" {
-		gatewayURL = a.cfg.GatewayURL
+	gatewayURL := a.cfg.GatewayURL
+	for {
+		client := gateway.NewClient(gateway.Options{
+			GatewayURL:      gatewayURL,
+			Identity:        identity,
+			ClusterName:     a.cfg.ClusterName,
+			Version:         runtimeVersion,
+			Logger:          a.logger,
+			Handler:         router,
+			CommandTimeout:  a.cfg.CommandTimeout,
+			HeartbeatPeriod: a.cfg.HeartbeatPeriod,
+		})
+		err = client.Run(ctx)
+		if !errors.Is(err, gateway.ErrAccessRevoked) {
+			return err
+		}
+		a.logger.Warn("agent access revoked; waiting for a new registration token")
+		identity, err = a.waitForNewRegistration(ctx, store, tokenSource, runtimeVersion, 10*time.Second)
+		if err != nil {
+			return err
+		}
 	}
-	client := gateway.NewClient(gateway.Options{
-		GatewayURL:      gatewayURL,
-		Identity:        identity,
-		ClusterName:     a.cfg.ClusterName,
-		Version:         runtimeVersion,
-		Logger:          a.logger,
-		Handler:         router,
-		CommandTimeout:  a.cfg.CommandTimeout,
-		HeartbeatPeriod: a.cfg.HeartbeatPeriod,
-	})
-	return client.Run(ctx)
 }
 
-func (a *App) identity(ctx context.Context, runtimeVersion string) (auth.Identity, error) {
-	store, err := auth.NewInClusterCredentialStore(a.cfg.Namespace, a.cfg.CredentialsSecretName)
-	if err != nil {
-		return auth.Identity{}, fmt.Errorf("create credentials store: %w", err)
-	}
+func (a *App) identity(ctx context.Context, store auth.CredentialStore, tokenSource auth.RegistrationTokenSource, runtimeVersion string) (auth.Identity, error) {
 	identity, err := store.Load(ctx)
 	if err != nil {
 		return auth.Identity{}, fmt.Errorf("load agent credentials: %w", err)
@@ -87,8 +101,12 @@ func (a *App) identity(ctx context.Context, runtimeVersion string) (auth.Identit
 	if identity.Valid() {
 		return identity, nil
 	}
-	registrar := auth.NewRegistrar(a.cfg.PlatformURL, a.cfg.RegistrationToken)
-	identity, registered, err := auth.Bootstrap(ctx, store, registrar, a.cfg.RegistrationToken, a.cfg.ClusterName, runtimeVersion)
+	registrationToken, err := a.registrationToken(ctx, tokenSource)
+	if err != nil {
+		return auth.Identity{}, err
+	}
+	registrar := auth.NewRegistrar(a.cfg.PlatformURL, registrationToken)
+	identity, registered, err := auth.Bootstrap(ctx, store, registrar, registrationToken, a.cfg.ClusterName, runtimeVersion)
 	if err != nil {
 		return auth.Identity{}, fmt.Errorf("register agent: %w", err)
 	}
@@ -100,10 +118,67 @@ func (a *App) identity(ctx context.Context, runtimeVersion string) (auth.Identit
 			zap.String("gateway_url", identity.GatewayURL),
 		)
 	}
-	// Use the gateway URL from registration if the platform returned one,
-	// falling back to the configured value.
-	if identity.GatewayURL == "" {
-		identity.GatewayURL = a.cfg.GatewayURL
-	}
 	return identity, nil
+}
+
+func (a *App) registrationToken(ctx context.Context, source auth.RegistrationTokenSource) (string, error) {
+	if source == nil {
+		return a.cfg.RegistrationToken, nil
+	}
+	token, err := source.Load(ctx)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (a *App) waitForNewRegistration(ctx context.Context, store auth.CredentialStore, source auth.RegistrationTokenSource, version string, pollInterval time.Duration) (auth.Identity, error) {
+	var rejectedToken string
+	for {
+		if err := ctx.Err(); err != nil {
+			return auth.Identity{}, err
+		}
+		token, err := a.registrationToken(ctx, source)
+		if err != nil {
+			a.logger.Warn("cannot read registration Secret", zap.Error(err))
+		} else if token != "" && token != rejectedToken {
+			identity, registerErr := auth.NewRegistrar(a.cfg.PlatformURL, token).Register(ctx, a.cfg.ClusterName, version)
+			if registerErr == nil {
+				if identity.AgentID == "" || !identity.Valid() {
+					rejectedToken = token
+					a.logger.Warn("registration returned incomplete credentials; waiting for a new token")
+					continue
+				}
+				for {
+					if err := store.Save(ctx, identity); err == nil {
+						a.logger.Info("registered IncidentFlow agent", zap.String("agent_id", identity.AgentID), zap.String("cluster_id", identity.ClusterID))
+						return identity, nil
+					} else {
+						a.logger.Warn("cannot persist new agent credentials", zap.Error(err))
+					}
+					if !waitContext(ctx, pollInterval) {
+						return auth.Identity{}, ctx.Err()
+					}
+				}
+			}
+			if auth.IsPermanentRegistrationError(registerErr) {
+				rejectedToken = token
+			}
+			a.logger.Warn("agent registration failed; waiting for a valid token", zap.Error(registerErr))
+		}
+		if !waitContext(ctx, pollInterval) {
+			return auth.Identity{}, ctx.Err()
+		}
+	}
+}
+
+func waitContext(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

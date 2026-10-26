@@ -43,3 +43,17 @@ func TestKubernetesCredentialStorePopulatesHelmCreatedSecret(t *testing.T) {
 		t.Fatalf("unexpected persisted identity: %+v, %v", identity, err)
 	}
 }
+
+func TestKubernetesCredentialStoreNeverCreatesMissingSecret(t *testing.T) {
+	client := fake.NewClientset()
+	store := NewKubernetesCredentialStore(client, "agent", "credentials")
+	err := store.Save(context.Background(), Identity{AgentID: "agent_1", Token: "if_agent_secret"})
+	if err == nil || !strings.Contains(err.Error(), "reapply the Helm release") {
+		t.Fatalf("expected Helm ownership error, got %v", err)
+	}
+	for _, action := range client.Actions() {
+		if action.GetVerb() == "create" {
+			t.Fatalf("agent attempted to create Kubernetes resource: %v", action)
+		}
+	}
+}

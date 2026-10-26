@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"testing"
@@ -12,7 +13,58 @@ import (
 	"go.uber.org/zap"
 )
 
+func TestClientStopsRetryingRevokedConnection(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("loopback listener unavailable: %v", err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Agent access revoked"), time.Now().Add(time.Second))
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+	client := NewClient(Options{
+		GatewayURL: "ws://" + listener.Addr().String(), Identity: auth.Identity{AgentID: "old-agent", Token: "old-token"},
+		ClusterName: "test", Version: "test", Logger: zap.NewNop(), HeartbeatPeriod: time.Hour,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := client.Run(ctx); !errors.Is(err, ErrAccessRevoked) {
+		t.Fatalf("expected revoked access, got %v", err)
+	}
+}
+
+func TestDialRejectsForbiddenAgent(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("loopback listener unavailable: %v", err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+	_, err = dialWebSocket(context.Background(), websocket.DefaultDialer, "ws://"+listener.Addr().String(), auth.Identity{Token: "old-token"}, "test", "test", time.Hour)
+	if !errors.Is(err, ErrAccessRevoked) {
+		t.Fatalf("expected revoked access for 403 handshake, got %v", err)
+	}
+}
+
 func TestServeConnectionStopsWorkersOnCancel(t *testing.T) {
+	closeCodes := make(chan int, 20)
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Skipf("loopback listener unavailable: %v", err)
@@ -25,6 +77,9 @@ func TestServeConnectionStopsWorkersOnCancel(t *testing.T) {
 		defer conn.Close()
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
+				if closeErr, ok := err.(*websocket.CloseError); ok {
+					closeCodes <- closeErr.Code
+				}
 				return
 			}
 		}
@@ -57,6 +112,14 @@ func TestServeConnectionStopsWorkersOnCancel(t *testing.T) {
 			}
 		case <-time.After(time.Second):
 			t.Fatalf("serve %d did not stop after cancellation", i)
+		}
+		select {
+		case code := <-closeCodes:
+			if code != websocket.CloseGoingAway {
+				t.Fatalf("serve %d closed with code %d", i, code)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("serve %d did not send a close frame", i)
 		}
 	}
 }

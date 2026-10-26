@@ -33,12 +33,8 @@ spec:
           env:
             - name: INCIDENTFLOW_CREDENTIALS_SECRET_NAME
               value: {{ include "incidentflow-k8s-agent.secretName" . | quote }}
-            - name: INCIDENTFLOW_REGISTRATION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "incidentflow-k8s-agent.bootstrapSecretName" . }}
-                  key: registration-token
-                  optional: true
+            - name: INCIDENTFLOW_REGISTRATION_TOKEN_SECRET_NAME
+              value: {{ include "incidentflow-k8s-agent.bootstrapSecretName" . | quote }}
             - name: K8S_NAMESPACE_NAME
               valueFrom:
                 fieldRef:
