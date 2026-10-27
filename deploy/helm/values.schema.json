@@ -92,6 +92,11 @@
     "image": {
       "additionalProperties": false,
       "properties": {
+        "digest": {
+          "default": "",
+          "description": "Immutable container image digest. Takes precedence over tag when set.",
+          "type": "string"
+        },
         "pullPolicy": {
           "default": "IfNotPresent",
           "description": "Image pull policy.",
@@ -114,9 +119,19 @@
       "required": [
         "repository",
         "tag",
+        "digest",
         "pullPolicy"
       ],
       "title": "image",
+      "type": "object"
+    },
+    "deploymentStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["Recreate", "RollingUpdate"], "type": "string" },
+        "progressDeadlineSeconds": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["type", "progressDeadlineSeconds"],
       "type": "object"
     },
     "imagePullSecrets": {

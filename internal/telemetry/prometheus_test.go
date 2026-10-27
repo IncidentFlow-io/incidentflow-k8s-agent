@@ -14,7 +14,7 @@ func TestMetricsServerExposesAgentMetrics(t *testing.T) {
 	GatewayReconnects.Inc()
 	K8sAPIDuration.WithLabelValues("k8s_list_pods", "success").Observe(0.01)
 
-	srv := httptest.NewServer(NewMetricsServer(":0").Handler)
+	srv := httptest.NewServer(NewMetricsServer(":0", NewHealthState()).Handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/metrics")
@@ -46,7 +46,7 @@ func TestMetricsServerExposesAgentMetrics(t *testing.T) {
 }
 
 func TestMetricsServerHealthz(t *testing.T) {
-	srv := httptest.NewServer(NewMetricsServer(":0").Handler)
+	srv := httptest.NewServer(NewMetricsServer(":0", NewHealthState()).Handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -56,5 +56,30 @@ func TestMetricsServerHealthz(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /healthz status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestMetricsServerReadyzRequiresCredentialsAndGateway(t *testing.T) {
+	health := NewHealthState()
+	srv := httptest.NewServer(NewMetricsServer(":0", health).Handler)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("/readyz status = %d, want 503", resp.StatusCode)
+	}
+	resp.Body.Close()
+	health.SetCredentialsReady(true)
+	health.SetGatewayConnected(true)
+	resp, err = http.Get(srv.URL + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("/readyz status = %d, want 200", resp.StatusCode)
 	}
 }

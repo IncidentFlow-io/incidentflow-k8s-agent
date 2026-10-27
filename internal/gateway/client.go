@@ -44,6 +44,8 @@ type Client struct {
 	dialer                Dialer
 	writeMu               sync.Mutex
 	maxConcurrentCommands int
+	onConnectionState     func(bool)
+	onHeartbeat           func()
 }
 
 type Options struct {
@@ -58,6 +60,11 @@ type Options struct {
 	// MaxConcurrentCommands bounds in-flight Kubernetes commands per connection.
 	// Zero uses a safe default.
 	MaxConcurrentCommands int
+	// OnConnectionState is called when an active gateway connection closes.
+	OnConnectionState func(bool)
+	// OnHeartbeat is called only after a ping and heartbeat message were both
+	// written successfully on the active gateway session.
+	OnHeartbeat func()
 }
 
 func NewClient(opts Options) *Client {
@@ -80,6 +87,8 @@ func NewClient(opts Options) *Client {
 		heartbeatPeriod:       opts.HeartbeatPeriod,
 		dialer:                websocket.DefaultDialer,
 		maxConcurrentCommands: maxConcurrentCommands,
+		onConnectionState:     opts.OnConnectionState,
+		onHeartbeat:           opts.OnHeartbeat,
 	}
 }
 
@@ -106,6 +115,9 @@ func (c *Client) Run(ctx context.Context) error {
 		connectedAt := time.Now()
 		err = c.serveConnection(ctx, conn)
 		telemetry.GatewayConnected.Set(0)
+		if c.onConnectionState != nil {
+			c.onConnectionState(false)
+		}
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -183,6 +195,9 @@ func (c *Client) heartbeat(ctx context.Context, conn *websocket.Conn, errCh chan
 			if pingErr != nil {
 				reportConnectionError(ctx, errCh, pingErr)
 				return
+			}
+			if c.onHeartbeat != nil {
+				c.onHeartbeat()
 			}
 		}
 	}
