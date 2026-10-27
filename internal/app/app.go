@@ -29,6 +29,21 @@ func New(cfg config.Config, logger *zap.Logger) *App {
 
 func (a *App) Run(ctx context.Context) error {
 	runtimeVersion := version.Runtime()
+	health := telemetry.NewHealthState()
+	if a.cfg.MetricsAddr != "" {
+		metricsSrv := telemetry.NewMetricsServer(a.cfg.MetricsAddr, health)
+		go func() {
+			a.logger.Info("serving Prometheus metrics and health probes", zap.String("addr", a.cfg.MetricsAddr))
+			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				a.logger.Warn("metrics server stopped", zap.Error(err))
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = metricsSrv.Shutdown(shutdownCtx)
+		}()
+	}
 	store, err := auth.NewInClusterCredentialStore(a.cfg.Namespace, a.cfg.CredentialsSecretName)
 	if err != nil {
 		return fmt.Errorf("create credentials store: %w", err)
@@ -44,23 +59,10 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	health.SetCredentialsReady(identity.Valid())
 	kubeService, err := kube.NewInClusterService()
 	if err != nil {
 		return err
-	}
-	if a.cfg.MetricsAddr != "" {
-		metricsSrv := telemetry.NewMetricsServer(a.cfg.MetricsAddr)
-		go func() {
-			a.logger.Info("serving Prometheus metrics", zap.String("addr", a.cfg.MetricsAddr))
-			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				a.logger.Warn("metrics server stopped", zap.Error(err))
-			}
-		}()
-		defer func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			_ = metricsSrv.Shutdown(shutdownCtx)
-		}()
 	}
 	guard := security.NewNamespaceGuard(a.cfg.NamespaceAllowlist, a.cfg.NamespaceDenylist)
 	limits := security.Limits{
@@ -72,14 +74,16 @@ func (a *App) Run(ctx context.Context) error {
 	gatewayURL := a.cfg.GatewayURL
 	for {
 		client := gateway.NewClient(gateway.Options{
-			GatewayURL:      gatewayURL,
-			Identity:        identity,
-			ClusterName:     a.cfg.ClusterName,
-			Version:         runtimeVersion,
-			Logger:          a.logger,
-			Handler:         router,
-			CommandTimeout:  a.cfg.CommandTimeout,
-			HeartbeatPeriod: a.cfg.HeartbeatPeriod,
+			GatewayURL:        gatewayURL,
+			Identity:          identity,
+			ClusterName:       a.cfg.ClusterName,
+			Version:           runtimeVersion,
+			Logger:            a.logger,
+			Handler:           router,
+			CommandTimeout:    a.cfg.CommandTimeout,
+			HeartbeatPeriod:   a.cfg.HeartbeatPeriod,
+			OnConnectionState: health.SetGatewayConnected,
+			OnHeartbeat:       func() { health.SetGatewayConnected(true) },
 		})
 		err = client.Run(ctx)
 		if !errors.Is(err, gateway.ErrAccessRevoked) {
@@ -90,6 +94,7 @@ func (a *App) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		health.SetCredentialsReady(identity.Valid())
 	}
 }
 

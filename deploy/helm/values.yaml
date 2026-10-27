@@ -1,11 +1,19 @@
 # -- Number of agent replicas. Should always be 1 — the agent holds a persistent WebSocket connection.
 replicaCount: 1
 
+# A single agent may hold only one gateway session. Recreate avoids overlapping
+# sessions until the gateway has an explicit handoff/duplicate-session guarantee.
+deploymentStrategy:
+  type: Recreate
+  progressDeadlineSeconds: 180
+
 image:
   # -- Docker image repository.
   repository: ghcr.io/incidentflow-io/incidentflow-k8s-agent
   # -- Image tag. Defaults to the chart appVersion when empty.
   tag: ""
+  # -- Immutable image digest. When set, it takes precedence over tag.
+  digest: ""
   # -- Image pull policy.
   pullPolicy: IfNotPresent
 

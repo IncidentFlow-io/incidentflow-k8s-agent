@@ -21,23 +21,26 @@ The agent never exposes a public endpoint and never requires inbound traffic. Al
 
 - Kubernetes 1.24+
 - Helm 3.10+
-- A registration token from the IncidentFlow platform (`incidentflow cluster install` handles this automatically)
+- An Agent registration created in IncidentFlow and its protected bootstrap
+  Secret command from the installation screen
 
 ### Install via Helm OCI
 
 ```sh
-helm install incidentflow-k8s-agent \
+helm upgrade --install incidentflow-k8s-agent \
   oci://ghcr.io/incidentflow-io/charts/incidentflow-k8s-agent \
-  --version 1.0.10 \
+  --version 1.0.14 \
   --namespace incidentflow-agent \
   --create-namespace \
-  --set clusterName=prod-us-east \
-  --set registrationToken=<your-token>
+  --set-string clusterName="<cluster-identifier>" \
+  --set registrationTokenSecretName="incidentflow-k8s-agent-bootstrap"
 ```
 
 ### Install via IncidentFlow CLI
 
-The recommended way. The CLI handles token issuance, helm diff preview, and confirmation before making any changes:
+The recommended way. The CLI guides protected token issuance, bootstrap Secret
+creation, Helm diff preview, and confirmation before making any changes. The
+token is never put in Helm values or arguments:
 
 ```sh
 incidentflow cluster install --name prod-us-east
@@ -66,10 +69,15 @@ On first start the agent exchanges the one-time registration token for a permane
 
 The Helm chart pre-creates the empty credentials Secret and grants the agent only `get`, `update`, and `patch` access to that exact Secret. It grants `get` on the separately managed bootstrap Secret so a running agent can read a replacement token after access is revoked. The agent cannot create Secrets or other Kubernetes resources. The credentials Secret manifest omits `data`, so normal Helm upgrades, rollbacks, and patch-based GitOps reconciliation preserve the agent-written credentials. A GitOps controller configured to replace or force-recreate the Secret can still erase them; do not enable that behavior for this resource. If the namespace or credentials Secret is deleted, install again with a newly issued registration token.
 
+Run the protected bootstrap Secret command in the IncidentFlow UI. Do not copy a
+token into a terminal transcript, source-controlled manifest, Helm value, or
+documentation. After the Secret exists, install using only its name:
+
 ```sh
-kubectl --context <your-context> create namespace incidentflow-agent --dry-run=client -o yaml | kubectl --context <your-context> apply -f -
-kubectl --context <your-context> -n incidentflow-agent create secret generic incidentflow-k8s-agent-bootstrap --from-literal=registration-token='<one-time-token>' --dry-run=client -o yaml | kubectl --context <your-context> apply -f -
-helm upgrade --install incidentflow-k8s-agent ./deploy/helm --kube-context <your-context> --namespace incidentflow-agent --set registrationTokenSecretName=incidentflow-k8s-agent-bootstrap
+helm upgrade --install incidentflow-k8s-agent ./deploy/helm \
+  --kube-context <your-context> \
+  --namespace incidentflow-agent \
+  --set registrationTokenSecretName=incidentflow-k8s-agent-bootstrap
 ```
 
 ## Supported commands

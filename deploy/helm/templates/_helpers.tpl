@@ -34,6 +34,14 @@ Avoid double-name when Release.Name already contains the chart name.
 {{- default .Release.Name (default .Values.agent.clusterName .Values.clusterName) -}}
 {{- end -}}
 
+{{- define "incidentflow-k8s-agent.image" -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "incidentflow-k8s-agent.labels" -}}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 app.kubernetes.io/name: {{ include "incidentflow-k8s-agent.name" . }}

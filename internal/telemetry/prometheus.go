@@ -2,11 +2,25 @@ package telemetry
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// HealthState separates process liveness from connection readiness. Readiness
+// only becomes true after credentials are available and the gateway session is
+// connected; a running process alone must not make a rollout successful.
+type HealthState struct {
+	credentialsReady atomic.Bool
+	gatewayConnected atomic.Bool
+}
+
+func NewHealthState() *HealthState                        { return &HealthState{} }
+func (s *HealthState) SetCredentialsReady(ready bool)     { s.credentialsReady.Store(ready) }
+func (s *HealthState) SetGatewayConnected(connected bool) { s.gatewayConnected.Store(connected) }
+func (s *HealthState) Ready() bool                        { return s.credentialsReady.Load() && s.gatewayConnected.Load() }
 
 // Prometheus metrics exported by the agent and scraped from the /metrics
 // endpoint. The default registry also exposes go_* and process_* collectors
@@ -37,11 +51,18 @@ var (
 )
 
 // NewMetricsServer builds an HTTP server exposing Prometheus metrics on
-// /metrics (and a /healthz liveness probe) at addr.
-func NewMetricsServer(addr string) *http.Server {
+// /metrics, /healthz and /readyz at addr.
+func NewMetricsServer(addr string, health *HealthState) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if health == nil || !health.Ready() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 	return &http.Server{Addr: addr, Handler: mux}
