@@ -174,7 +174,16 @@ jobs:
           environment="${{ needs.prepare.outputs.environment }}"
 
           export version
-          yq -i '.image.tag = strenv(version)' "$values_file"
+          # The published agent chart is nested under the `agent` dependency
+          # in infrastructure's umbrella chart. Updating the root `image.tag`
+          # looks successful but does not change the deployed agent image.
+          yq -i '.agent.image.tag = strenv(version)' "$values_file"
+
+          actual_version=$(yq -r '.agent.image.tag' "$values_file")
+          if [ "$actual_version" != "$version" ]; then
+            echo "ERROR: expected .agent.image.tag=$version, got $actual_version" >&2
+            exit 1
+          fi
 
           git config user.email "ci-bot@incidentflow.io"
           git config user.name "CI Bot"
