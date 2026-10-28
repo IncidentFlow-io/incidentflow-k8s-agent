@@ -76,6 +76,12 @@ networkPolicy:
   enabled: true
   gatewayCIDRs: []
   kubernetesAPICIDRs: []
+  # Required only for workloads injected with an Istio sidecar. These are the
+  # ClusterIP CIDRs of istiod's XDS/SDS service, on port 15012.
+  istioControlPlaneCIDRs: []
+  # Optional in-cluster dependencies. Configure only when the agent uses them.
+  platformAPICIDRs: []
+  otelCollectorCIDRs: []
 
 # Optional Istio egress confinement. Enable only where a sidecar is injected.
 # The Gateway host is registered as TLS passthrough; Kubernetes API remains an

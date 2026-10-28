@@ -246,7 +246,10 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "gatewayCIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "kubernetesAPICIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "kubernetesAPICIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "istioControlPlaneCIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "platformAPICIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "otelCollectorCIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       },
       "required": ["enabled", "gatewayCIDRs", "kubernetesAPICIDRs"],
       "type": "object"

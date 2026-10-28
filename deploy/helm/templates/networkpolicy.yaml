@@ -47,4 +47,37 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # Istio XDS/SDS control plane. Required only when a sidecar is injected.
+{{- if gt (len .Values.networkPolicy.istioControlPlaneCIDRs) 0 }}
+    - to:
+{{- range .Values.networkPolicy.istioControlPlaneCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 15012
+{{- end }}
+    # Platform API for registration and credential rotation.
+{{- if gt (len .Values.networkPolicy.platformAPICIDRs) 0 }}
+    - to:
+{{- range .Values.networkPolicy.platformAPICIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 80
+{{- end }}
+    # OpenTelemetry collector when tracing is enabled.
+{{- if gt (len .Values.networkPolicy.otelCollectorCIDRs) 0 }}
+    - to:
+{{- range .Values.networkPolicy.otelCollectorCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 4317
+{{- end }}
 {{- end }}
