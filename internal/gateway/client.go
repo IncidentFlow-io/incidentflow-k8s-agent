@@ -254,6 +254,13 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 }
 
 func policyAllowsCommand(cmd apiv1.Command) error {
+	// Namespace discovery is an internal, admin-authorized bootstrap operation
+	// used to create the first access policy. It is not exposed as an MCP tool;
+	// every normal Kubernetes action still requires an active workspace policy.
+	if cmd.Action == "agent.discover_namespaces" {
+		return nil
+	}
+
 	policy := cmd.AccessPolicy
 	if policy == nil || policy.Version < 1 {
 		return errors.New("no active workspace access policy")
@@ -264,7 +271,7 @@ func policyAllowsCommand(cmd apiv1.Command) error {
 	if cmd.Action == "k8s.get_pod_logs" && !policy.PodLogsEnabled {
 		return errors.New("pod logs are disabled by the workspace policy")
 	}
-	if policy.NamespaceMode == "all" || cmd.Action == "k8s.list_namespaces" || cmd.Action == "agent.discover_namespaces" {
+	if policy.NamespaceMode == "all" || cmd.Action == "k8s.list_namespaces" {
 		return nil
 	}
 	var params struct {

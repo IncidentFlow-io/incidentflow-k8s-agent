@@ -75,6 +75,11 @@ func TestPolicyAllowsOnlyConfiguredReadAccess(t *testing.T) {
 	if err := policyAllowsCommand(allowed); err == nil {
 		t.Fatal("expected missing policy to be denied")
 	}
+
+	discovery := apiv1.Command{Action: "agent.discover_namespaces"}
+	if err := policyAllowsCommand(discovery); err != nil {
+		t.Fatalf("expected bootstrap namespace discovery to be allowed: %v", err)
+	}
 }
 
 func TestServeConnectionStopsWorkersOnCancel(t *testing.T) {
