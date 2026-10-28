@@ -89,8 +89,8 @@ func (a *App) Run(ctx context.Context) error {
 		if !errors.Is(err, gateway.ErrAccessRevoked) {
 			return err
 		}
-		a.logger.Warn("agent access revoked; waiting for a new registration token")
-		identity, err = a.waitForNewRegistration(ctx, store, tokenSource, runtimeVersion, 10*time.Second)
+		a.logger.Warn("agent access revoked; waiting for externally rotated credentials")
+		identity, err = a.waitForUpdatedCredentials(ctx, store, identity, 10*time.Second)
 		if err != nil {
 			return err
 		}
@@ -105,6 +105,9 @@ func (a *App) identity(ctx context.Context, store auth.CredentialStore, tokenSou
 	}
 	if identity.Valid() {
 		return identity, nil
+	}
+	if !a.cfg.CredentialsWriteEnabled {
+		return auth.Identity{}, errors.New("agent credentials are absent; provision agent_id and agent_token through an external Secret manager")
 	}
 	registrationToken, err := a.registrationToken(ctx, tokenSource)
 	if err != nil {
@@ -124,6 +127,24 @@ func (a *App) identity(ctx context.Context, store auth.CredentialStore, tokenSou
 		)
 	}
 	return identity, nil
+}
+
+// waitForUpdatedCredentials supports rotation without granting the agent write
+// access to Kubernetes Secrets. An external controller updates the named Secret
+// and the agent retries only after it observes a different complete identity.
+func (a *App) waitForUpdatedCredentials(ctx context.Context, store auth.CredentialStore, previous auth.Identity, pollInterval time.Duration) (auth.Identity, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return auth.Identity{}, err
+		}
+		identity, err := store.Load(ctx)
+		if err == nil && identity.Valid() && identity.Token != previous.Token {
+			return identity, nil
+		}
+		if !waitContext(ctx, pollInterval) {
+			return auth.Identity{}, ctx.Err()
+		}
+	}
 }
 
 func (a *App) registrationToken(ctx context.Context, source auth.RegistrationTokenSource) (string, error) {

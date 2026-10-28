@@ -14,8 +14,19 @@ type Command struct {
 	Params json.RawMessage `json:"params,omitempty"`
 	// Traceparent / Tracestate carry the W3C trace context from the originating
 	// request so the agent can link its spans into the distributed trace.
-	Traceparent string `json:"traceparent,omitempty"`
-	Tracestate  string `json:"tracestate,omitempty"`
+	Traceparent  string        `json:"traceparent,omitempty"`
+	Tracestate   string        `json:"tracestate,omitempty"`
+	AccessPolicy *AccessPolicy `json:"access_policy,omitempty"`
+}
+
+// AccessPolicy is an additional, fail-closed restriction supplied by the
+// workspace. Kubernetes RBAC remains the final authority and may restrict
+// access further. The policy never grants exec, secrets, or write operations.
+type AccessPolicy struct {
+	NamespaceMode  string   `json:"namespace_mode"`
+	Namespaces     []string `json:"namespaces"`
+	PodLogsEnabled bool     `json:"pod_logs_enabled"`
+	Version        int64    `json:"version"`
 }
 
 type ListNamespacesParams struct{}

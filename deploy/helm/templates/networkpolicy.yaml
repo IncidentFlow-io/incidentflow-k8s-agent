@@ -1,0 +1,50 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if eq (len .Values.networkPolicy.gatewayCIDRs) 0 }}
+{{- fail "networkPolicy.gatewayCIDRs must contain the Gateway egress CIDR(s)" }}
+{{- end }}
+{{- if eq (len .Values.networkPolicy.kubernetesAPICIDRs) 0 }}
+{{- fail "networkPolicy.kubernetesAPICIDRs must contain the Kubernetes API CIDR(s)" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentflow-k8s-agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress:
+    # Cluster DNS only.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Kubernetes API only, on HTTPS.
+    - to:
+{{- range .Values.networkPolicy.kubernetesAPICIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+    # IncidentFlow Gateway only, on WSS/HTTPS.
+    - to:
+{{- range .Values.networkPolicy.gatewayCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

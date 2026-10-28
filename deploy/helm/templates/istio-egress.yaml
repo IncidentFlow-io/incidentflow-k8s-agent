@@ -1,0 +1,33 @@
+{{- if .Values.istio.enabled }}
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: {{ include "incidentflow-k8s-agent.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
+spec:
+  hosts: [{{ .Values.istio.gatewayHost | quote }}]
+  location: MESH_EXTERNAL
+  resolution: DNS
+  ports:
+    - number: 443
+      name: tls-wss
+      protocol: TLS
+---
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata:
+  name: {{ include "incidentflow-k8s-agent.fullname" . }}-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "incidentflow-k8s-agent.labels" . | nindent 4 }}
+spec:
+  workloadSelector:
+    labels:
+      {{- include "incidentflow-k8s-agent.selectorLabels" . | nindent 6 }}
+  egress:
+    - hosts:
+        - "./{{ .Values.istio.gatewayHost }}"
+        - "default/kubernetes.default.svc.cluster.local"
+{{- end }}

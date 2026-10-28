@@ -44,22 +44,28 @@ func (r *Router) Handle(ctx context.Context, cmd apiv1.Command) apiv1.Response {
 
 func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 	switch cmd.Action {
-	case ActionListNamespaces:
-		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_namespaces")
-		defer span.End()
+	case ActionDiscoverNamespaces:
 		namespaces, err := r.kube.ListNamespaces(ctx)
 		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
+		items := make([]any, 0, len(namespaces))
+		for _, namespace := range namespaces {
+			items = append(items, map[string]string{
+				"name":   namespace.Name,
+				"status": namespace.Status,
+			})
+		}
+		return map[string]any{"namespaces": items, "complete": true}, nil
+
+	case ActionListNamespaces:
+		// Do not call the cluster-scoped namespaces API. The configured allowlist
+		// is both the user-visible inventory and the RBAC boundary.
+		namespaces := r.guard.AllowedNamespaces()
 		filtered := make([]any, 0, len(namespaces))
 		for _, namespace := range namespaces {
-			if r.guard.Check(namespace.Name) == nil {
-				filtered = append(filtered, namespace)
-			}
+			filtered = append(filtered, map[string]string{"name": namespace})
 		}
-		span.SetAttributes(attribute.Int("items.count", len(filtered)))
-		span.SetStatus(codes.Ok, "")
 		return map[string]any{"namespaces": filtered}, nil
 
 	case ActionListPods:
@@ -334,17 +340,8 @@ func parallelMap[T any](
 }
 
 func (r *Router) allowedNamespaces(ctx context.Context) ([]string, error) {
-	namespaces, err := r.kube.ListNamespaces(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(namespaces))
-	for _, namespace := range namespaces {
-		if r.guard.Check(namespace.Name) == nil {
-			out = append(out, namespace.Name)
-		}
-	}
-	return out, nil
+	_ = ctx
+	return r.guard.AllowedNamespaces(), nil
 }
 
 type codedError struct {

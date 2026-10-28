@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,8 @@ import (
 const (
 	defaultMaxConcurrentCommands = 8
 	stableConnectionDuration     = 30 * time.Second
+	commandReplayTTL             = 10 * time.Minute
+	maxRememberedCommands        = 4096
 )
 
 // ErrAccessRevoked tells the app to obtain fresh registration credentials.
@@ -46,6 +49,8 @@ type Client struct {
 	maxConcurrentCommands int
 	onConnectionState     func(bool)
 	onHeartbeat           func()
+	seenCommands          map[string]time.Time
+	seenCommandsMu        sync.Mutex
 }
 
 type Options struct {
@@ -77,16 +82,21 @@ func NewClient(opts Options) *Client {
 		logger = zap.NewNop()
 	}
 	return &Client{
-		gatewayURL:            opts.GatewayURL,
-		identity:              opts.Identity,
-		clusterName:           opts.ClusterName,
-		version:               opts.Version,
-		logger:                logger.With(zap.String("component", "gateway")),
-		handler:               opts.Handler,
-		commandTimeout:        opts.CommandTimeout,
-		heartbeatPeriod:       opts.HeartbeatPeriod,
-		dialer:                websocket.DefaultDialer,
+		gatewayURL:      opts.GatewayURL,
+		identity:        opts.Identity,
+		clusterName:     opts.ClusterName,
+		version:         opts.Version,
+		logger:          logger.With(zap.String("component", "gateway")),
+		handler:         opts.Handler,
+		commandTimeout:  opts.CommandTimeout,
+		heartbeatPeriod: opts.HeartbeatPeriod,
+		dialer: &websocket.Dialer{TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			// InsecureSkipVerify is deliberately left false. Do not add a
+			// configuration escape hatch: the agent sends bearer credentials.
+		}},
 		maxConcurrentCommands: maxConcurrentCommands,
+		seenCommands:          make(map[string]time.Time),
 		onConnectionState:     opts.OnConnectionState,
 		onHeartbeat:           opts.OnHeartbeat,
 	}
@@ -215,6 +225,16 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 			c.logger.Warn("discarding invalid gateway message", zap.Error(err))
 			continue
 		}
+		if err := policyAllowsCommand(cmd); err != nil {
+			c.logger.Warn("command denied by access policy",
+				zap.String("command_id", cmd.ID), zap.String("action", cmd.Action), zap.Error(err))
+			c.writeResponse(conn, apiv1.Failure(cmd.ID, apiv1.ErrPolicyDenied, err.Error()))
+			continue
+		}
+		if !c.claimCommand(cmd.ID) {
+			c.writeResponse(conn, apiv1.Failure(cmd.ID, apiv1.ErrDuplicateCommand, "command id was already processed"))
+			continue
+		}
 		c.logger.Debug("received command from gateway",
 			zap.String("command_id", cmd.ID),
 			zap.String("action", cmd.Action),
@@ -230,6 +250,70 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, wg *sync.Wa
 			defer func() { <-commandSem }()
 			c.handleCommand(ctx, conn, cmd)
 		}()
+	}
+}
+
+func policyAllowsCommand(cmd apiv1.Command) error {
+	policy := cmd.AccessPolicy
+	if policy == nil || policy.Version < 1 {
+		return errors.New("no active workspace access policy")
+	}
+	if policy.NamespaceMode != "selected" && policy.NamespaceMode != "all" {
+		return errors.New("invalid workspace access policy")
+	}
+	if cmd.Action == "k8s.get_pod_logs" && !policy.PodLogsEnabled {
+		return errors.New("pod logs are disabled by the workspace policy")
+	}
+	if policy.NamespaceMode == "all" || cmd.Action == "k8s.list_namespaces" || cmd.Action == "agent.discover_namespaces" {
+		return nil
+	}
+	var params struct {
+		Namespace string `json:"namespace"`
+	}
+	if err := json.Unmarshal(cmd.Params, &params); err != nil {
+		return errors.New("invalid command namespace")
+	}
+	if params.Namespace == "" {
+		return errors.New("namespace is required by the workspace policy")
+	}
+	for _, allowed := range policy.Namespaces {
+		if params.Namespace == allowed {
+			return nil
+		}
+	}
+	return errors.New("namespace is not allowed by the workspace policy")
+}
+
+func (c *Client) claimCommand(id string) bool {
+	now := time.Now()
+	c.seenCommandsMu.Lock()
+	defer c.seenCommandsMu.Unlock()
+	for commandID, seenAt := range c.seenCommands {
+		if now.Sub(seenAt) > commandReplayTTL {
+			delete(c.seenCommands, commandID)
+		}
+	}
+	if _, exists := c.seenCommands[id]; exists {
+		return false
+	}
+	if len(c.seenCommands) >= maxRememberedCommands {
+		// Refuse rather than evicting a live replay-protection entry.
+		return false
+	}
+	c.seenCommands[id] = now
+	return true
+}
+
+func (c *Client) writeResponse(conn *websocket.Conn, resp apiv1.Response) {
+	data, err := EncodeResponse(resp)
+	if err != nil {
+		c.logger.Error("encode command response", zap.String("command_id", resp.ID), zap.Error(err))
+		return
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		c.logger.Warn("write command response failed", zap.String("command_id", resp.ID), zap.Error(err))
 	}
 }
 

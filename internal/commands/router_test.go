@@ -39,7 +39,7 @@ func (fakeKube) DescribePod(context.Context, string, string) (kube.PodDescriptio
 }
 
 func TestRouterRejectsUnsupportedAction(t *testing.T) {
-	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard([]string{"prod"}, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
 	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: "k8s.delete_pod"})
 	if resp.Status != apiv1.StatusError || resp.Error.Code != apiv1.ErrUnsupportedAction {
 		t.Fatalf("unexpected response: %#v", resp)
@@ -56,7 +56,7 @@ func TestRouterDeniesNamespace(t *testing.T) {
 }
 
 func TestRouterFiltersDeniedNamespaces(t *testing.T) {
-	router := NewRouter(fakeKube{}, security.NewNamespaceGuard(nil, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard([]string{"prod"}, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
 	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionListNamespaces})
 	if resp.Status != apiv1.StatusSuccess {
 		t.Fatalf("unexpected response: %#v", resp)
@@ -65,5 +65,24 @@ func TestRouterFiltersDeniedNamespaces(t *testing.T) {
 	namespaces := data["namespaces"].([]any)
 	if len(namespaces) != 1 {
 		t.Fatalf("expected one namespace after filtering, got %d", len(namespaces))
+	}
+}
+
+func TestRouterDiscoveryDoesNotApplyOperationalNamespacePolicy(t *testing.T) {
+	router := NewRouter(
+		fakeKube{},
+		security.NewNamespaceGuard([]string{"prod"}, nil),
+		security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100},
+	)
+	resp := router.Handle(context.Background(), apiv1.Command{
+		ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionDiscoverNamespaces,
+	})
+	if resp.Status != apiv1.StatusSuccess {
+		t.Fatalf("unexpected response: %#v", resp)
+	}
+	data := resp.Data.(map[string]any)
+	namespaces := data["namespaces"].([]any)
+	if len(namespaces) != 2 || !data["complete"].(bool) {
+		t.Fatalf("discovery must return the complete RBAC-visible inventory: %#v", data)
 	}
 }

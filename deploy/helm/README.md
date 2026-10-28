@@ -28,7 +28,11 @@ Outbound-only Kubernetes agent for IncidentFlow
 | limits.maxTailLines | int | `1000` | Hard maximum number of log lines the agent will return per request. |
 | logFormat | string | `"json"` | Agent log format. Use JSON in Kubernetes; console is useful only for local development. |
 | logLevel | string | `"info"` | Log level for the agent process. One of: debug, info, warn, error. |
-| namespaceAllowlist | list | `[]` (all non-system namespaces are accessible) | Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces. |
+| namespaceAllowlist | list | required | Mandatory namespace allowlist. The chart creates Role/RoleBinding pairs only in these namespaces; cluster-wide RBAC is never created. |
+| namespaceDiscovery.enabled | bool | `false` | Grants the agent only cluster-scoped `list namespaces` for the Access Control admin UI; it does not expand pod or log access. |
+| networkPolicy.gatewayCIDRs | list | required when NetworkPolicy is enabled | Public egress CIDRs of the IncidentFlow Gateway. |
+| networkPolicy.kubernetesAPICIDRs | list | required when NetworkPolicy is enabled | CIDRs of the Kubernetes API endpoint. |
+| istio.enabled | bool | `false` | Creates an Istio ServiceEntry and Sidecar egress allowlist for the Gateway and Kubernetes API. Requires sidecar injection. |
 | nodeSelector | object | `{}` (schedule on any node) | Node selector applied to the agent pod. |
 | observability.environment | string | `"production"` | Deployment environment label included in trace metadata (e.g. production, staging). |
 | observability.tracing.enabled | bool | `false` | Enable OpenTelemetry tracing. When false, no OTEL environment variables are injected. |

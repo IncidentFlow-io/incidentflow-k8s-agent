@@ -20,6 +20,9 @@ func dialWebSocket(ctx context.Context, dialer Dialer, gatewayURL string, identi
 	if err != nil {
 		return nil, err
 	}
+	if parsed.Scheme != "wss" || parsed.Host == "" {
+		return nil, fmt.Errorf("gateway URL must be an absolute wss:// URL")
+	}
 	q := parsed.Query()
 	if identity.AgentID != "" {
 		q.Set("agent_id", identity.AgentID)

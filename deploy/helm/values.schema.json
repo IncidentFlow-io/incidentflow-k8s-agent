@@ -142,6 +142,15 @@
       "title": "imagePullSecrets",
       "type": "array"
     },
+    "istio": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gatewayHost": { "type": "string", "minLength": 1 }
+      },
+      "required": ["enabled", "gatewayHost"],
+      "type": "object"
+    },
     "limits": {
       "additionalProperties": false,
       "properties": {
@@ -199,10 +208,12 @@
       "type": "string"
     },
     "namespaceAllowlist": {
-      "description": "Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.",
+      "description": "Mandatory namespace allowlist. Kubernetes Roles are created only for these namespaces.",
       "items": {
-        "required": []
+        "type": "string",
+        "minLength": 1
       },
+      "minItems": 1,
       "title": "namespaceAllowlist",
       "type": "array"
     },
@@ -214,11 +225,30 @@
       "title": "namespaceDenylist",
       "type": "array"
     },
+    "namespaceDiscovery": {
+      "additionalProperties": false,
+      "description": "Optional cluster-scoped namespace discovery for the Access Control admin UI.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false }
+      },
+      "required": ["enabled"],
+      "type": "object"
+    },
     "nodeSelector": {
       "additionalProperties": false,
       "description": "Node selector applied to the agent pod.",
       "required": [],
       "title": "nodeSelector",
+      "type": "object"
+    },
+    "networkPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gatewayCIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "kubernetesAPICIDRs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "required": ["enabled", "gatewayCIDRs", "kubernetesAPICIDRs"],
       "type": "object"
     },
     "observability": {
@@ -413,10 +443,13 @@
     "replicaCount",
     "image",
     "imagePullSecrets",
+    "istio",
     "agent",
     "logLevel",
     "logFormat",
     "namespaceAllowlist",
+    "namespaceDiscovery",
+    "networkPolicy",
     "limits",
     "podSecurityContext",
     "securityContext",

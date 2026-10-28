@@ -67,7 +67,7 @@ Key environment variables injected by the Helm chart:
 
 On first start the agent exchanges the one-time registration token for a permanent agent ID and agent token. It stores these only in the namespaced Kubernetes Secret `incidentflow-agent-credentials`. On restart it reads that Secret first, so no registration token or PVC is required.
 
-The Helm chart pre-creates the empty credentials Secret and grants the agent only `get`, `update`, and `patch` access to that exact Secret. It grants `get` on the separately managed bootstrap Secret so a running agent can read a replacement token after access is revoked. The agent cannot create Secrets or other Kubernetes resources. The credentials Secret manifest omits `data`, so normal Helm upgrades, rollbacks, and patch-based GitOps reconciliation preserve the agent-written credentials. A GitOps controller configured to replace or force-recreate the Secret can still erase them; do not enable that behavior for this resource. If the namespace or credentials Secret is deleted, install again with a newly issued registration token.
+Production credentials are provisioned and rotated by an external Secret manager. The agent has only `get` permission on its exact credentials Secret—never `list`, `watch`, `create`, `update`, `patch`, or `delete`. Populate `agent_id` and `agent_token` before starting the Deployment. When the Gateway revokes access, update that Secret with a new identity; the running agent polls for and adopts the new token without reinstallation. The chart's empty Secret is a bootstrap placeholder only and should be managed by External Secrets, Sealed Secrets, or an equivalent controller in production.
 
 Run the protected bootstrap Secret command in the IncidentFlow UI. Do not copy a
 token into a terminal transcript, source-controlled manifest, Helm value, or
@@ -96,7 +96,7 @@ helm upgrade --install incidentflow-k8s-agent ./deploy/helm \
 ## Security model
 
 - Read-only Kubernetes RBAC for workloads.
-- Minimal credentials Secret access: the agent can only get/update/patch its own credentials Secret.
+- Minimal credentials Secret access: the agent can only get its own credentials Secret; an external controller owns rotation.
 - No exec, apply, delete, patch, or mutation commands.
 - System namespaces are always blocked: `kube-system`, `kube-public`, `kube-node-lease`.
 - Optional namespace allowlist further restricts scope.
