@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -38,6 +39,7 @@ type Config struct {
 	DefaultTailLines            int64
 	MaxLogBytes                 int64
 	MetricsAddr                 string
+	CredentialsWriteEnabled     bool
 }
 
 func Load() (Config, error) {
@@ -59,6 +61,7 @@ func Load() (Config, error) {
 		DefaultTailLines:            getenvInt64("INCIDENTFLOW_DEFAULT_TAIL_LINES", DefaultLogTailLines),
 		MaxLogBytes:                 getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
 		MetricsAddr:                 getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
+		CredentialsWriteEnabled:     getenvBool("INCIDENTFLOW_CREDENTIALS_WRITE_ENABLED", false),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -73,6 +76,17 @@ func (c Config) Validate() error {
 	}
 	if c.GatewayURL == "" {
 		missing = append(missing, "INCIDENTFLOW_GATEWAY_URL")
+	}
+	// The agent carries a bearer credential. Plaintext WebSockets would expose it
+	// to the network, so reject them before attempting a connection.
+	if c.GatewayURL != "" {
+		gatewayURL, err := url.Parse(c.GatewayURL)
+		if err != nil || gatewayURL.Scheme != "wss" || gatewayURL.Host == "" {
+			return errors.New("INCIDENTFLOW_GATEWAY_URL must be an absolute wss:// URL")
+		}
+	}
+	if len(c.NamespaceAllowlist) == 0 {
+		return errors.New("INCIDENTFLOW_NAMESPACE_ALLOWLIST must contain at least one namespace")
 	}
 	// Credentials are normally loaded from the Kubernetes Secret at runtime, so
 	// neither token environment variable is required on a restarted pod.
@@ -116,6 +130,18 @@ func getenvInt64(key string, fallback int64) int64 {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func getenvBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

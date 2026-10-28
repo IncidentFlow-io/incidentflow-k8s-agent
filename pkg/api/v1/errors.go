@@ -9,4 +9,6 @@ const (
 	ErrNotFound          = "NOT_FOUND"
 	ErrTimeout           = "TIMEOUT"
 	ErrInternal          = "INTERNAL_ERROR"
+	ErrDuplicateCommand  = "DUPLICATE_COMMAND"
+	ErrPolicyDenied      = "POLICY_DENIED"
 )

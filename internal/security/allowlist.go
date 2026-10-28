@@ -2,12 +2,26 @@ package security
 
 import (
 	"fmt"
+	"sort"
 )
 
 var defaultDeniedNamespaces = []string{
 	"kube-system",
 	"kube-public",
 	"kube-node-lease",
+}
+
+// AllowedNamespaces returns the explicit allowlist. Kubernetes RBAC is scoped
+// to the same set, so this intentionally never discovers namespaces cluster-wide.
+func (g NamespaceGuard) AllowedNamespaces() []string {
+	out := make([]string, 0, len(g.allowlist))
+	for namespace := range g.allowlist {
+		if g.Check(namespace) == nil {
+			out = append(out, namespace)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 type NamespaceGuard struct {

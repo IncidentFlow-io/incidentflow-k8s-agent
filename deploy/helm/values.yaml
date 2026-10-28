@@ -50,8 +50,8 @@ logLevel: info
 # -- Agent log format. Use JSON in Kubernetes; console is useful only for local development.
 logFormat: json
 
-# -- Namespace allowlist. When non-empty, the agent restricts Kubernetes queries to these namespaces.
-# @default -- `[]` (all non-system namespaces are accessible)
+# -- Mandatory namespace allowlist. The chart creates namespaced Roles only for
+# these namespaces; an empty list is rejected to prevent cluster-wide reads.
 namespaceAllowlist: []
 # - production
 # - staging
@@ -63,6 +63,26 @@ namespaceDenylist:
   - kube-public
   - kube-node-lease
 # - monitoring
+
+# Optional cluster-scoped namespace discovery for the Access Control admin UI.
+# It grants only `list namespaces`; it does not expand read access to pods, logs,
+# or any other namespaced resource. Enable only if admins may see every namespace name.
+namespaceDiscovery:
+  enabled: false
+
+# Default-deny egress for the agent. Set these CIDRs to the public egress IPs
+# of the IncidentFlow Gateway and the Kubernetes API endpoint before install.
+networkPolicy:
+  enabled: true
+  gatewayCIDRs: []
+  kubernetesAPICIDRs: []
+
+# Optional Istio egress confinement. Enable only where a sidecar is injected.
+# The Gateway host is registered as TLS passthrough; Kubernetes API remains an
+# in-cluster HTTPS destination required for read-only queries.
+istio:
+  enabled: false
+  gatewayHost: gateway.incidentflow.io
 
 limits:
   # -- Default number of log lines returned when the caller does not specify a limit.
