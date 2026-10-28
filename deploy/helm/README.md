@@ -32,6 +32,9 @@ Outbound-only Kubernetes agent for IncidentFlow
 | namespaceDiscovery.enabled | bool | `false` | Grants the agent only cluster-scoped `list namespaces` for the Access Control admin UI; it does not expand pod or log access. |
 | networkPolicy.gatewayCIDRs | list | required when NetworkPolicy is enabled | Public egress CIDRs of the IncidentFlow Gateway. |
 | networkPolicy.kubernetesAPICIDRs | list | required when NetworkPolicy is enabled | CIDRs of the Kubernetes API endpoint. |
+| networkPolicy.istioControlPlaneCIDRs | list | `[]` | Istiod XDS/SDS service CIDRs, required when a sidecar is injected. |
+| networkPolicy.platformAPICIDRs | list | `[]` | Platform API service CIDRs for registration and credential rotation. |
+| networkPolicy.otelCollectorCIDRs | list | `[]` | OTEL collector service CIDRs when tracing is enabled. |
 | istio.enabled | bool | `false` | Creates an Istio ServiceEntry and Sidecar egress allowlist for the Gateway and Kubernetes API. Requires sidecar injection. |
 | nodeSelector | object | `{}` (schedule on any node) | Node selector applied to the agent pod. |
 | observability.environment | string | `"production"` | Deployment environment label included in trace metadata (e.g. production, staging). |
