@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/telemetry"
 	"golang.org/x/sync/singleflight"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,7 @@ func NewInClusterService() (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load in-cluster Kubernetes config: %w", err)
 	}
+	telemetry.ObserveKubernetesRequests(cfg)
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes client: %w", err)
