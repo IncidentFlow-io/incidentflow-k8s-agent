@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/telemetry"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -35,6 +36,7 @@ func NewInClusterCredentialStore(namespace, name string) (*KubernetesCredentialS
 	if err != nil {
 		return nil, fmt.Errorf("load in-cluster Kubernetes config: %w", err)
 	}
+	telemetry.ObserveKubernetesRequests(cfg)
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes client: %w", err)
