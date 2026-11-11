@@ -62,6 +62,15 @@ func TestPolicyAllowsOnlyConfiguredReadAccess(t *testing.T) {
 	if err := policyAllowsCommand(allowed); err != nil {
 		t.Fatalf("expected allowed command: %v", err)
 	}
+	allowed.AccessPolicy = &apiv1.AccessPolicy{
+		NamespaceMode: "selected",
+		Namespaces:    []string{"other"},
+		Version:       2,
+	}
+	if err := policyAllowsCommand(allowed); err == nil {
+		t.Fatal("expected the updated policy to deny the previously allowed namespace")
+	}
+	allowed.AccessPolicy = policy
 	allowed.Action = "k8s.get_pod_logs"
 	if err := policyAllowsCommand(allowed); err == nil {
 		t.Fatal("expected logs to be denied when disabled")

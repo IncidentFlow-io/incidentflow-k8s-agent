@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/kube"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
@@ -15,8 +16,11 @@ type fakeKube struct{}
 func (fakeKube) ListNamespaces(context.Context) ([]kube.Namespace, error) {
 	return []kube.Namespace{{Name: "prod"}, {Name: "kube-system"}}, nil
 }
-func (fakeKube) ListPods(_ context.Context, namespace string) ([]kube.Pod, error) {
-	return []kube.Pod{{Name: "p", Namespace: namespace}}, nil
+func (fakeKube) ListPods(_ context.Context, namespace string, _ time.Duration) ([]kube.Pod, bool, error) {
+	return []kube.Pod{{Name: "p", Namespace: namespace}}, false, nil
+}
+func (fakeKube) ListPodsForHealth(ctx context.Context, namespace string, maxAge time.Duration) ([]kube.Pod, bool, error) {
+	return fakeKube{}.ListPods(ctx, namespace, maxAge)
 }
 func (fakeKube) GetPod(context.Context, string, string) (kube.Pod, error) {
 	return kube.Pod{Name: "p"}, nil

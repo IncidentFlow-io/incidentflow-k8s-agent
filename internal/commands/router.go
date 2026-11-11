@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/incidentflow/incidentflow-k8s-agent/internal/kube"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/observability"
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
@@ -73,28 +75,54 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		if err != nil {
 			return nil, invalidParams(err)
 		}
+		maxAge := kube.MaxPodCacheAge
+		if params.MaxStalenessSeconds != nil {
+			seconds := *params.MaxStalenessSeconds
+			if seconds < 1 || seconds > int(kube.MaxPodCacheAge/time.Second) {
+				return nil, invalidParams(errors.New("max_staleness_seconds must be between 1 and 5"))
+			}
+			maxAge = time.Duration(seconds) * time.Second
+		}
+		switch params.Consistency {
+		case "", "cached":
+		case "fresh":
+			maxAge = 0
+		default:
+			return nil, invalidParams(errors.New("consistency must be cached or fresh"))
+		}
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
+		}
+		listPods := r.kube.ListPods
+		if params.HealthSummaryOnly {
+			listPods = r.kube.ListPodsForHealth
 		}
 		if params.Namespace == "" {
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
 				return nil, err
 			}
-			all, err := parallelMapTraced(ctx, "k8s.api.list_pods", namespaces, r.kube.ListPods)
+			all, err := parallelMapTraced(ctx, "k8s.api.list_pods", namespaces, func(ctx context.Context, namespace string) ([]kube.Pod, error) {
+				pods, _, err := listPods(ctx, namespace, maxAge)
+				return pods, err
+			})
 			return map[string]any{"pods": all}, err
 		}
 		ctx, span := observability.Tracer.Start(ctx, "k8s.api.list_pods")
 		defer span.End()
 		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace))
-		pods, err := r.kube.ListPods(ctx, params.Namespace)
+		pods, cached, err := listPods(ctx, params.Namespace, maxAge)
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		} else {
 			span.SetAttributes(attribute.Int("items.count", len(pods)))
 			span.SetStatus(codes.Ok, "")
 		}
-		return map[string]any{"pods": pods}, err
+		cacheResult := "live"
+		if cached {
+			cacheResult = "cached"
+		}
+		return map[string]any{"pods": pods, "cache_result": cacheResult}, err
 
 	case ActionGetPod:
 		params, err := decodeParams[apiv1.GetPodParams](cmd)

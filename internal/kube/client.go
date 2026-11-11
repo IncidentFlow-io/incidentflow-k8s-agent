@@ -18,8 +18,11 @@ import (
 const namespaceCacheTTL = 30 * time.Second
 
 type Service struct {
-	client    kubernetes.Interface
-	discovery discovery.DiscoveryInterface
+	client       kubernetes.Interface
+	discovery    discovery.DiscoveryInterface
+	podCaches    map[string]*podCache
+	podLists     singleflight.Group
+	podListSlots chan struct{}
 
 	nsMu       sync.Mutex
 	nsCache    []Namespace
@@ -33,6 +36,7 @@ func NewInClusterService() (*Service, error) {
 		return nil, fmt.Errorf("load in-cluster Kubernetes config: %w", err)
 	}
 	telemetry.ObserveKubernetesRequests(cfg)
+	cfg.QPS, cfg.Burst = 3, 10
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes client: %w", err)
@@ -41,7 +45,7 @@ func NewInClusterService() (*Service, error) {
 }
 
 func NewService(client kubernetes.Interface) *Service {
-	return &Service{client: client, discovery: client.Discovery()}
+	return &Service{client: client, discovery: client.Discovery(), podListSlots: make(chan struct{}, 3)}
 }
 
 type Namespace struct {
