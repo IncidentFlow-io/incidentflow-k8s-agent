@@ -53,6 +53,8 @@ logFormat: json
 # -- Mandatory namespace allowlist. The chart creates namespaced Roles only for
 # these namespaces; an empty list is rejected to prevent cluster-wide reads.
 namespaceAllowlist: []
+podCacheEnabled: false
+podCacheMaxNamespaces: 16
 # - production
 # - staging
 

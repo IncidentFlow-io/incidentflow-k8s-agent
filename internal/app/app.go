@@ -65,6 +65,12 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	guard := security.NewNamespaceGuard(a.cfg.NamespaceAllowlist, a.cfg.NamespaceDenylist)
+	if a.cfg.PodCacheEnabled {
+		namespaces := guard.AllowedNamespaces()
+		count := min(len(namespaces), int(a.cfg.PodCacheMaxNamespaces))
+		kubeService.StartPodCache(ctx, namespaces[:count])
+		a.logger.Info("pod cache scope", zap.Int("cached_namespaces", count), zap.Int("allowed_namespaces", len(namespaces)))
+	}
 	limits := security.Limits{
 		DefaultTailLines: a.cfg.DefaultTailLines,
 		MaxTailLines:     a.cfg.MaxTailLines,

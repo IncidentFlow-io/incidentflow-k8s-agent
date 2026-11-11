@@ -207,6 +207,18 @@
       "title": "logFormat",
       "type": "string"
     },
+    "podCacheEnabled": {
+      "default": false,
+      "description": "Enable the namespace-scoped pod informer cache.",
+      "type": "boolean"
+    },
+    "podCacheMaxNamespaces": {
+      "default": 16,
+      "description": "Maximum number of namespace-scoped pod informers.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
     "namespaceAllowlist": {
       "description": "Mandatory namespace allowlist. Kubernetes Roles are created only for these namespaces.",
       "items": {

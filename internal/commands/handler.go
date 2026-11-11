@@ -2,13 +2,15 @@ package commands
 
 import (
 	"context"
+	"time"
 
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/kube"
 )
 
 type Kubernetes interface {
 	ListNamespaces(ctx context.Context) ([]kube.Namespace, error)
-	ListPods(ctx context.Context, namespace string) ([]kube.Pod, error)
+	ListPods(ctx context.Context, namespace string, maxAge time.Duration) ([]kube.Pod, bool, error)
+	ListPodsForHealth(ctx context.Context, namespace string, maxAge time.Duration) ([]kube.Pod, bool, error)
 	GetPod(ctx context.Context, namespace, name string) (kube.Pod, error)
 	GetPodLogs(ctx context.Context, namespace, pod, container string, tailLines int64, maxBytes int64) (kube.LogResult, error)
 	ListEvents(ctx context.Context, namespace string) ([]kube.Event, error)

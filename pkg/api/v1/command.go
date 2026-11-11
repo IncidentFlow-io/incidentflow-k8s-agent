@@ -36,7 +36,10 @@ type NamespaceParams struct {
 }
 
 type ListPodsParams struct {
-	Namespace string `json:"namespace,omitempty"`
+	Namespace           string `json:"namespace,omitempty"`
+	Consistency         string `json:"consistency,omitempty"`
+	MaxStalenessSeconds *int   `json:"max_staleness_seconds,omitempty"`
+	HealthSummaryOnly   bool   `json:"health_summary_only,omitempty"`
 }
 
 type GetPodParams struct {

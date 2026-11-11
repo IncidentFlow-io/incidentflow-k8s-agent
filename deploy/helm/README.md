@@ -4,6 +4,12 @@
 
 Outbound-only Kubernetes agent for IncidentFlow
 
+Set `podCacheEnabled: true` to start one Pod informer per allowed namespace up to
+`podCacheMaxNamespaces` (default 16). Namespaces are sorted by name before applying
+the limit. Reads in the remaining allowed namespaces use the live API.
+Pod reads fall back to Kubernetes when freshness cannot be confirmed within
+five seconds. A `consistency: fresh` pod-list request uses the live API.
+
 ## Values
 
 | Key | Type | Default | Description |

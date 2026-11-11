@@ -40,6 +40,8 @@ type Config struct {
 	MaxLogBytes                 int64
 	MetricsAddr                 string
 	CredentialsWriteEnabled     bool
+	PodCacheEnabled             bool
+	PodCacheMaxNamespaces       int64
 }
 
 func Load() (Config, error) {
@@ -62,6 +64,8 @@ func Load() (Config, error) {
 		MaxLogBytes:                 getenvInt64("INCIDENTFLOW_MAX_LOG_BYTES", DefaultMaxLogBytes),
 		MetricsAddr:                 getenv("INCIDENTFLOW_METRICS_ADDR", DefaultMetricsAddr),
 		CredentialsWriteEnabled:     getenvBool("INCIDENTFLOW_CREDENTIALS_WRITE_ENABLED", false),
+		PodCacheEnabled:             getenvBool("INCIDENTFLOW_POD_CACHE_ENABLED", false),
+		PodCacheMaxNamespaces:       getenvInt64("INCIDENTFLOW_POD_CACHE_MAX_NAMESPACES", 16),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -70,6 +74,9 @@ func Load() (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.PodCacheEnabled && (c.PodCacheMaxNamespaces < 1 || c.PodCacheMaxNamespaces > 256) {
+		return errors.New("INCIDENTFLOW_POD_CACHE_MAX_NAMESPACES must be between 1 and 256")
+	}
 	var missing []string
 	if c.PlatformURL == "" {
 		missing = append(missing, "INCIDENTFLOW_PLATFORM_URL")
