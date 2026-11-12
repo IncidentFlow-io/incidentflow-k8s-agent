@@ -30,6 +30,5 @@ func (b *Backoff) Next() time.Duration {
 		}
 		b.current = next
 	}
-	jitter := time.Duration(rand.Int64N(int64(b.current / 2)))
-	return b.current + jitter
+	return time.Duration(rand.Int64N(int64(b.current)))
 }
