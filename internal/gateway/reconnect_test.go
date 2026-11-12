@@ -12,11 +12,11 @@ func TestBackoffProgressesAndCaps(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		_ = backoff.Next()
 	}
-	if first < time.Second {
-		t.Fatalf("first backoff too small: %s", first)
+	if first >= time.Second {
+		t.Fatalf("first jittered backoff must stay below 1 second: %s", first)
 	}
-	if second < 2*time.Second {
-		t.Fatalf("second backoff too small: %s", second)
+	if second >= 2*time.Second {
+		t.Fatalf("second jittered backoff must stay below 2 seconds: %s", second)
 	}
 	if backoff.current != 4*time.Second {
 		t.Fatalf("backoff did not cap: %s", backoff.current)
