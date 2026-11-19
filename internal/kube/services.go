@@ -6,6 +6,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func (s *Service) GetServiceEndpoints(ctx context.Context, namespace, serviceName string) (ServiceEndpointStatus, error) {
+	endpoints, err := s.client.CoreV1().Endpoints(namespace).Get(ctx, serviceName, metav1.GetOptions{})
+	if err != nil {
+		return ServiceEndpointStatus{}, err
+	}
+	status := ServiceEndpointStatus{ServiceName: serviceName, Namespace: namespace}
+	for _, subset := range endpoints.Subsets {
+		status.ReadyEndpointCount += len(subset.Addresses)
+		status.EndpointCount += len(subset.Addresses) + len(subset.NotReadyAddresses)
+	}
+	return status, nil
+}
+
 func (s *Service) ListServices(ctx context.Context, namespace string) ([]ServiceResource, error) {
 	items, err := s.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {

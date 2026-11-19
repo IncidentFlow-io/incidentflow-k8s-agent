@@ -15,6 +15,7 @@ import (
 	"github.com/incidentflow/incidentflow-k8s-agent/internal/security"
 	apiv1 "github.com/incidentflow/incidentflow-k8s-agent/pkg/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 type Router struct {
@@ -92,6 +93,13 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		}
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
+		}
+		if params.Deployment != "" {
+			if params.Namespace == "" {
+				return nil, invalidParams(errors.New("deployment requires a namespace"))
+			}
+			pods, err := r.kube.ListPodsForDeployment(ctx, params.Namespace, params.Deployment)
+			return map[string]any{"pods": pods}, err
 		}
 		listPods := r.kube.ListPods
 		if params.HealthSummaryOnly {
@@ -185,6 +193,13 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 		if err := r.guard.Check(params.Namespace); err != nil {
 			return nil, namespaceDenied(err)
 		}
+		if params.Deployment != "" {
+			if params.Namespace == "" {
+				return nil, invalidParams(errors.New("deployment requires a namespace"))
+			}
+			events, err := r.kube.ListEventsForDeployment(ctx, params.Namespace, params.Deployment)
+			return map[string]any{"events": events}, err
+		}
 		if params.Namespace == "" {
 			namespaces, err := r.allowedNamespaces(ctx)
 			if err != nil {
@@ -260,6 +275,31 @@ func (r *Router) dispatch(ctx context.Context, cmd apiv1.Command) (any, error) {
 			span.SetStatus(codes.Ok, "")
 		}
 		return map[string]any{"services": services}, err
+
+	case ActionGetServiceEndpoints:
+		params, err := decodeParams[apiv1.ListServicesParams](cmd)
+		if err != nil {
+			return nil, invalidParams(err)
+		}
+		if params.Namespace == "" || params.ServiceName == "" {
+			return nil, invalidParams(errors.New("namespace and service_name are required"))
+		}
+		if problems := validation.IsDNS1035Label(params.ServiceName); len(problems) > 0 {
+			return nil, invalidParams(errors.New("service_name must be a DNS label"))
+		}
+		if err := r.guard.Check(params.Namespace); err != nil {
+			return nil, namespaceDenied(err)
+		}
+		ctx, span := observability.Tracer.Start(ctx, "k8s.api.get_service_endpoints")
+		defer span.End()
+		span.SetAttributes(attribute.String("k8s.namespace", params.Namespace), attribute.String("k8s.service", params.ServiceName))
+		status, err := r.kube.GetServiceEndpoints(ctx, params.Namespace, params.ServiceName)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		span.SetStatus(codes.Ok, "")
+		return map[string]any{"service_endpoints": status}, nil
 
 	case ActionGetRolloutStatus:
 		params, err := decodeParams[apiv1.GetRolloutStatusParams](cmd)
