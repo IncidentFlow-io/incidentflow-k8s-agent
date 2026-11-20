@@ -37,6 +37,7 @@ type NamespaceParams struct {
 
 type ListPodsParams struct {
 	Namespace           string `json:"namespace,omitempty"`
+	Deployment          string `json:"deployment,omitempty"`
 	Consistency         string `json:"consistency,omitempty"`
 	MaxStalenessSeconds *int   `json:"max_staleness_seconds,omitempty"`
 	HealthSummaryOnly   bool   `json:"health_summary_only,omitempty"`
@@ -55,7 +56,8 @@ type GetPodLogsParams struct {
 }
 
 type ListEventsParams struct {
-	Namespace string `json:"namespace,omitempty"`
+	Namespace  string `json:"namespace,omitempty"`
+	Deployment string `json:"deployment,omitempty"`
 }
 
 type ListDeploymentsParams struct {
@@ -63,7 +65,8 @@ type ListDeploymentsParams struct {
 }
 
 type ListServicesParams struct {
-	Namespace string `json:"namespace,omitempty"`
+	Namespace   string `json:"namespace,omitempty"`
+	ServiceName string `json:"service_name,omitempty"`
 }
 
 type GetRolloutStatusParams struct {

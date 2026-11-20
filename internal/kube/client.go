@@ -55,13 +55,22 @@ type Namespace struct {
 }
 
 type Pod struct {
-	Name       string            `json:"name"`
-	Namespace  string            `json:"namespace"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	Phase      string            `json:"phase"`
-	NodeName   string            `json:"node_name,omitempty"`
-	Containers []ContainerStatus `json:"containers,omitempty"`
-	Age        string            `json:"age,omitempty"`
+	Name            string            `json:"name"`
+	Namespace       string            `json:"namespace"`
+	UID             string            `json:"uid,omitempty"`
+	OwnerReferences []OwnerReference  `json:"owner_references,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Phase           string            `json:"phase"`
+	NodeName        string            `json:"node_name,omitempty"`
+	Containers      []ContainerStatus `json:"containers,omitempty"`
+	Age             string            `json:"age,omitempty"`
+}
+
+type OwnerReference struct {
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	UID        string `json:"uid"`
+	Controller bool   `json:"controller,omitempty"`
 }
 
 type ContainerStatus struct {
@@ -84,6 +93,7 @@ type Event struct {
 	Reason    string `json:"reason,omitempty"`
 	Message   string `json:"message,omitempty"`
 	Object    string `json:"object,omitempty"`
+	ObjectUID string `json:"object_uid,omitempty"`
 	Count     int32  `json:"count,omitempty"`
 	LastSeen  string `json:"last_seen,omitempty"`
 }
@@ -108,6 +118,13 @@ type ServiceResource struct {
 	ClusterIP string            `json:"cluster_ip,omitempty"`
 	Ports     []ServicePort     `json:"ports,omitempty"`
 	Age       string            `json:"age,omitempty"`
+}
+
+type ServiceEndpointStatus struct {
+	ServiceName        string `json:"service_name"`
+	Namespace          string `json:"namespace"`
+	ReadyEndpointCount int    `json:"ready_endpoint_count"`
+	EndpointCount      int    `json:"endpoint_count"`
 }
 
 type ServicePort struct {

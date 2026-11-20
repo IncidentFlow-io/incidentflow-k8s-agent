@@ -19,6 +19,9 @@ func (fakeKube) ListNamespaces(context.Context) ([]kube.Namespace, error) {
 func (fakeKube) ListPods(_ context.Context, namespace string, _ time.Duration) ([]kube.Pod, bool, error) {
 	return []kube.Pod{{Name: "p", Namespace: namespace}}, false, nil
 }
+func (fakeKube) ListPodsForDeployment(_ context.Context, namespace, deployment string) ([]kube.Pod, error) {
+	return []kube.Pod{{Name: deployment + "-pod", Namespace: namespace}}, nil
+}
 func (fakeKube) ListPodsForHealth(ctx context.Context, namespace string, maxAge time.Duration) ([]kube.Pod, bool, error) {
 	return fakeKube{}.ListPods(ctx, namespace, maxAge)
 }
@@ -29,11 +32,17 @@ func (fakeKube) GetPodLogs(context.Context, string, string, string, int64, int64
 	return kube.LogResult{Logs: "ok"}, nil
 }
 func (fakeKube) ListEvents(context.Context, string) ([]kube.Event, error) { return nil, nil }
+func (fakeKube) ListEventsForDeployment(context.Context, string, string) ([]kube.Event, error) {
+	return nil, nil
+}
 func (fakeKube) ListDeployments(context.Context, string) ([]kube.Deployment, error) {
 	return nil, nil
 }
 func (fakeKube) ListServices(context.Context, string) ([]kube.ServiceResource, error) {
 	return nil, nil
+}
+func (fakeKube) GetServiceEndpoints(_ context.Context, namespace, serviceName string) (kube.ServiceEndpointStatus, error) {
+	return kube.ServiceEndpointStatus{Namespace: namespace, ServiceName: serviceName}, nil
 }
 func (fakeKube) GetRolloutStatus(context.Context, string, string) (kube.RolloutStatus, error) {
 	return kube.RolloutStatus{Complete: true}, nil
@@ -69,6 +78,28 @@ func TestRouterFiltersDeniedNamespaces(t *testing.T) {
 	namespaces := data["namespaces"].([]any)
 	if len(namespaces) != 1 {
 		t.Fatalf("expected one namespace after filtering, got %d", len(namespaces))
+	}
+}
+
+func TestRouterReturnsOnlyNamedServiceEndpointStatus(t *testing.T) {
+	params, _ := json.Marshal(apiv1.ListServicesParams{Namespace: "prod", ServiceName: "ratings"})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard([]string{"prod"}, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionGetServiceEndpoints, Params: params})
+	if resp.Status != apiv1.StatusSuccess {
+		t.Fatalf("unexpected response: %#v", resp)
+	}
+	status := resp.Data.(map[string]any)["service_endpoints"].(kube.ServiceEndpointStatus)
+	if status.Namespace != "prod" || status.ServiceName != "ratings" {
+		t.Fatalf("wrong service scope: %#v", status)
+	}
+}
+
+func TestRouterRejectsInvalidServiceEndpointTarget(t *testing.T) {
+	params, _ := json.Marshal(apiv1.ListServicesParams{Namespace: "prod", ServiceName: "ratings/other"})
+	router := NewRouter(fakeKube{}, security.NewNamespaceGuard([]string{"prod"}, nil), security.Limits{DefaultTailLines: 200, MaxTailLines: 1000, MaxLogBytes: 100})
+	resp := router.Handle(context.Background(), apiv1.Command{ID: "req", Type: apiv1.MessageTypeCommand, Action: ActionGetServiceEndpoints, Params: params})
+	if resp.Status != apiv1.StatusError || resp.Error.Code != apiv1.ErrInvalidParams {
+		t.Fatalf("unexpected response: %#v", resp)
 	}
 }
 

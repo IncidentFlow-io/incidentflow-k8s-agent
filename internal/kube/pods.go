@@ -116,6 +116,13 @@ func (s *Service) GetPod(ctx context.Context, namespace, name string) (Pod, erro
 }
 
 func toPod(pod corev1.Pod) Pod {
+	owners := make([]OwnerReference, 0, len(pod.OwnerReferences))
+	for _, owner := range pod.OwnerReferences {
+		owners = append(owners, OwnerReference{
+			Kind: owner.Kind, Name: owner.Name, UID: string(owner.UID),
+			Controller: owner.Controller != nil && *owner.Controller,
+		})
+	}
 	containers := make([]ContainerStatus, 0, len(pod.Status.ContainerStatuses))
 	images := map[string]string{}
 	for _, container := range pod.Spec.Containers {
@@ -131,13 +138,15 @@ func toPod(pod corev1.Pod) Pod {
 		})
 	}
 	return Pod{
-		Name:       pod.Name,
-		Namespace:  pod.Namespace,
-		Labels:     pod.Labels,
-		Phase:      string(pod.Status.Phase),
-		NodeName:   pod.Spec.NodeName,
-		Containers: containers,
-		Age:        age(pod.CreationTimestamp.Time),
+		Name:            pod.Name,
+		Namespace:       pod.Namespace,
+		UID:             string(pod.UID),
+		OwnerReferences: owners,
+		Labels:          pod.Labels,
+		Phase:           string(pod.Status.Phase),
+		NodeName:        pod.Spec.NodeName,
+		Containers:      containers,
+		Age:             age(pod.CreationTimestamp.Time),
 	}
 }
 
